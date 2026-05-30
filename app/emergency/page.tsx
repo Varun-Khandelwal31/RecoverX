@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Phone, MapPin, Edit2, Check, Copy } from "lucide-react";
+import { Phone, MapPin, Edit2, Check } from "lucide-react";
 import { getSupabase, DEMO_USER } from "../lib/supabase";
 
 // ── City lookup table ──────────────────────────────────────────────────────
