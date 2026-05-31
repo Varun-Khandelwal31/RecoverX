@@ -237,6 +237,13 @@ function classifySpecialty(tags: Record<string, string>): Doctor["specialty"] | 
   return null;
 }
 
+// Multiple Overpass mirrors — tried in order until one succeeds
+const OVERPASS_ENDPOINTS = [
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
+];
+
 /** Fetch real nearby healthcare facilities via Overpass API within RADIUS_KM */
 async function fetchDoctors(lat: number, lng: number): Promise<Doctor[]> {
   // Overpass bounding box: ~25 km in each direction (1° lat ≈ 111 km)
@@ -244,7 +251,7 @@ async function fetchDoctors(lat: number, lng: number): Promise<Doctor[]> {
   const bbox = `${lat - delta},${lng - delta},${lat + delta},${lng + delta}`;
 
   const query = `
-    [out:json][timeout:20];
+    [out:json][timeout:25];
     (
       node["healthcare"="physiotherapist"](${bbox});
       node["healthcare"="doctor"]["healthcare:speciality"~"physio|ortho|rehabilitation|sports",i](${bbox});
@@ -257,14 +264,26 @@ async function fetchDoctors(lat: number, lng: number): Promise<Doctor[]> {
     out body 40;
   `;
 
-  const res = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    body: `data=${encodeURIComponent(query)}`,
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
-  const json = await res.json();
+  // Try each mirror in order; use the first one that responds successfully
+  let json: { elements?: unknown[] } = {};
+  let lastError: unknown;
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+      if (!res.ok) continue;
+      json = await res.json();
+      if (json.elements) break; // got a valid response
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (!json.elements && lastError) throw lastError;
   const elements: Array<{ id: number; lat: number; lon: number; tags: Record<string, string> }> =
-    json.elements ?? [];
+    (json.elements ?? []) as Array<{ id: number; lat: number; lon: number; tags: Record<string, string> }>;
 
   const results: Doctor[] = [];
   let altIndex = 0;
