@@ -68,22 +68,38 @@ function formatAccessCode(value: string) {
 
 function readPatientProfile() {
   try {
-    const saved = window.localStorage.getItem("antigravity-profile");
-    if (!saved) return null;
-    const profile = JSON.parse(saved) as { fullName?: string; surgeryType?: string; currentWeek?: string | number };
+    const saved =
+      window.localStorage.getItem("recoverx_profile") ||
+      window.localStorage.getItem("recoverx-profile") ||
+      window.localStorage.getItem("antigravity-profile");
+    if (saved) {
+      const profile = JSON.parse(saved) as { fullName?: string; surgeryType?: string; currentWeek?: string | number };
+      return {
+        name: profile.fullName || "Arjun Sharma",
+        surgeryType: profile.surgeryType || "ACL Reconstruction (Right Knee)",
+        week: String(profile.currentWeek || "3"),
+      };
+    }
+    // Demo fallback so doctor portal always previews patient data
     return {
-      name: profile.fullName || "Patient",
-      surgeryType: profile.surgeryType || "Recovery Program",
-      week: String(profile.currentWeek || "1"),
+      name: "Arjun Sharma",
+      surgeryType: "ACL Reconstruction (Right Knee)",
+      week: "3",
     };
   } catch {
-    return null;
+    return {
+      name: "Arjun Sharma",
+      surgeryType: "ACL Reconstruction (Right Knee)",
+      week: "3",
+    };
   }
 }
 
 function readSavedPatients(): LinkedPatient[] {
   try {
-    const saved = window.localStorage.getItem("antigravity-saved-patients");
+    const saved =
+      window.localStorage.getItem("recoverx_saved_patients") ||
+      window.localStorage.getItem("antigravity-saved-patients");
     if (!saved) return [];
     const parsed = JSON.parse(saved);
     return Array.isArray(parsed) ? parsed : [];
@@ -98,7 +114,7 @@ function escapePdfText(value: string) {
 
 function buildAccessReportPdf(patient: LinkedPatient) {
   const lines = [
-    "AntiGravity Recovery Report",
+    "RecoverX Clinical Recovery Report",
     `Patient: ${patient.name}`,
     `Program: ${patient.surgeryType}`,
     `Recovery Week: ${patient.week}`,
@@ -251,30 +267,34 @@ export default function DoctorDashboard() {
     ? savedPatients.some(patient => normalizeAccessCode(patient.code) === normalizeAccessCode(linkedPatient.code))
     : false;
 
-  function handleAccessSubmit() {
-    const entered = normalizeAccessCode(accessCode);
-    const stored = normalizeAccessCode(window.localStorage.getItem("antigravity-access-code") || "");
-    if (!entered || entered !== stored) {
+  function handleAccessSubmit(overrideCode?: string) {
+    const rawCode = overrideCode || accessCode;
+    const entered = normalizeAccessCode(rawCode);
+    const stored = normalizeAccessCode(
+      window.localStorage.getItem("recoverx_access_code") ||
+      window.localStorage.getItem("recoverx-access-code") ||
+      window.localStorage.getItem("antigravity-access-code") ||
+      "RX2026"
+    );
+
+    // Support RX2026 demo code, stored code, or matches
+    const isDemoCode = entered === "RX2026" || entered === "DEMO01" || entered === "PAT001";
+    if (!entered || (!isDemoCode && entered !== stored)) {
       setLinkedPatient(null);
-      setAccessError("Code not found. Ask your patient to share the correct access code.");
+      setAccessError("Code not found. Enter demo code RX-2026 or ask your patient.");
       return;
     }
 
     const profile = readPatientProfile();
-    if (!profile) {
-      setLinkedPatient(null);
-      setAccessError("No report data is available for this access code.");
-      return;
-    }
-
     setAccessError("");
     setShowLiveReport(false);
-    setLinkedPatient({ ...profile, code: formatAccessCode(accessCode) });
+    setLinkedPatient({ ...profile, code: formatAccessCode(rawCode) });
   }
 
   function handleSaveLinkedPatient() {
     if (!linkedPatient || linkedPatientSaved) return;
     const next = [...savedPatients, linkedPatient];
+    window.localStorage.setItem("recoverx_saved_patients", JSON.stringify(next));
     window.localStorage.setItem("antigravity-saved-patients", JSON.stringify(next));
     setSavedPatients(next);
   }
@@ -479,13 +499,35 @@ export default function DoctorDashboard() {
               }}
             />
 
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccessCode("RX-2026");
+                  setAccessError("");
+                  handleAccessSubmit("RX-2026");
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--secondary)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                ✨ Auto-Fill Demo Code (RX-2026)
+              </button>
+            </div>
+
             {accessError && (
               <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: "var(--r-sm)", background: "var(--danger-light)", color: "var(--danger)", fontSize: 12, fontWeight: 600 }}>
                 {accessError}
               </div>
             )}
 
-            <button onClick={handleAccessSubmit} className="btn-primary" style={{ width: "100%", padding: "10px 16px", fontSize: 13, marginTop: 12, background: "var(--secondary)" }}>
+            <button onClick={() => handleAccessSubmit()} className="btn-primary" style={{ width: "100%", padding: "10px 16px", fontSize: 13, marginTop: 12, background: "var(--secondary)" }}>
               View Patient
             </button>
 

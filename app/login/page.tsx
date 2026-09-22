@@ -45,6 +45,35 @@ export default function LoginPage() {
     }
   };
 
+  const handleDemoPatient = () => {
+    saveUser({
+      id: "demo-patient-001",
+      name: "Arjun Sharma",
+      email: "arjun@recoverx.health",
+      role: "patient",
+      surgeryType: "Total Knee Replacement",
+      surgeryDate: "2026-05-01",
+      side: "Right",
+      surgeon: "Dr. Meera Kapoor",
+      hospital: "Apollo Orthopaedic Centre",
+      week: 3,
+      plan: "pro",
+      accessCode: "RX-2026",
+    });
+    router.push("/dashboard");
+  };
+
+  const handleDemoDoctor = () => {
+    saveUser({
+      id: "demo-doctor-001",
+      name: "Dr. Meera Kapoor",
+      email: "dr.meera@recoverx.health",
+      role: "doctor",
+      week: 1,
+    });
+    router.push("/doctor/dashboard");
+  };
+
   return (
     <div className="min-h-screen flex bg-[var(--bg-void)] overflow-hidden">
 
@@ -65,7 +94,7 @@ export default function LoginPage() {
 
         <div className="flex-1 relative w-full flex items-center justify-center -mt-12 opacity-80 pointer-events-none">
           <div className="w-[120%] h-[120%] absolute">
-            <HeroScene />
+            <HeroScene showControls={false} />
           </div>
         </div>
 
@@ -90,9 +119,35 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-md mx-auto">
-          <div className="mb-8">
+          <div className="mb-6">
             <h1 className="font-display font-bold text-4xl text-[var(--text-1)] mb-3">Welcome back</h1>
-            <p className="font-body text-[var(--text-3)]">Continue your journey</p>
+            <p className="font-body text-[var(--text-3)]">Continue your recovery journey</p>
+          </div>
+
+          {/* Quick Demo Access */}
+          <div className="mb-6 p-4 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary-light)]/30 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--primary)] uppercase tracking-wider">
+                ⚡ Instant Demo Login
+              </span>
+              <span className="text-[10px] text-[var(--text-3)] font-mono">1-click test</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleDemoPatient}
+                className="py-2.5 px-3 rounded-lg bg-[var(--primary)] text-white text-xs font-semibold hover:opacity-90 transition flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <span>👤</span> Demo Patient
+              </button>
+              <button
+                type="button"
+                onClick={handleDemoDoctor}
+                className="py-2.5 px-3 rounded-lg bg-[var(--secondary)] text-white text-xs font-semibold hover:opacity-90 transition flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <span>🩺</span> Demo Doctor
+              </button>
+            </div>
           </div>
 
           {/* ── Role Selector ── */}

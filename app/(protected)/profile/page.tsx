@@ -70,6 +70,8 @@ function createAccessCode() {
 }
 
 async function saveProfile(profile: Profile) {
+  window.localStorage.setItem("recoverx_profile", JSON.stringify(profile));
+  window.localStorage.setItem("recoverx-profile", JSON.stringify(profile));
   window.localStorage.setItem("antigravity-profile", JSON.stringify(profile));
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -129,19 +131,26 @@ export default function ProfilePage() {
         avatarUrl: "",
       };
       setProfile(nextProfile);
+      window.localStorage.setItem("recoverx_profile", JSON.stringify(nextProfile));
+      window.localStorage.setItem("recoverx-profile", JSON.stringify(nextProfile));
       window.localStorage.setItem("antigravity-profile", JSON.stringify(nextProfile));
     }
   }, [router]);
 
   useEffect(() => {
-    const savedCode = window.localStorage.getItem("antigravity-access-code");
+    const savedCode =
+      window.localStorage.getItem("recoverx_access_code") ||
+      window.localStorage.getItem("recoverx-access-code") ||
+      window.localStorage.getItem("antigravity-access-code");
     if (savedCode) {
       setAccessCode(savedCode);
       return;
     }
-    const nextCode = createAccessCode();
-    window.localStorage.setItem("antigravity-access-code", nextCode);
-    setAccessCode(nextCode);
+    const defaultCode = "RX-2026";
+    window.localStorage.setItem("recoverx_access_code", defaultCode);
+    window.localStorage.setItem("recoverx-access-code", defaultCode);
+    window.localStorage.setItem("antigravity-access-code", defaultCode);
+    setAccessCode(defaultCode);
   }, []);
 
   const initials = useMemo(() => {

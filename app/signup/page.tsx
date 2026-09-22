@@ -84,7 +84,7 @@ export default function SignupPage() {
 
         <div className="flex-1 relative w-full flex items-center justify-center -mt-12 opacity-80 pointer-events-none">
           <div className="w-[120%] h-[120%] absolute">
-            <HeroScene />
+            <HeroScene showControls={false} />
           </div>
         </div>
 
@@ -214,7 +214,7 @@ export default function SignupPage() {
               <label className="font-body text-xs text-[var(--text-3)] leading-relaxed">
                 {role === "doctor"
                   ? "I confirm I am a licensed medical professional and agree to the Terms of Service."
-                  : "I understand AntiGravity supports, but does not replace, my licensed physiotherapist. I have read the Terms of Service."}
+                  : "I understand RecoverX supports, but does not replace, my licensed physiotherapist. I have read the Terms of Service."}
               </label>
             </div>
 

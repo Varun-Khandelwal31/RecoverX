@@ -5,10 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Activity, LayoutGrid, MessageCircle, PlayCircle, User, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import ErrorBoundary from "./ErrorBoundary";
 
 const appRoutes = [
   "/dashboard", "/session", "/activity", "/reports",
-  "/checkin", "/faq", "/profile", "/settings", "/clinical-trust",
+  "/checkin", "/messages", "/faq", "/profile", "/settings", "/clinical-trust",
   "/find-doctors", "/emergency", "/subscription",
 ];
 
@@ -16,7 +17,7 @@ const mobileTabs = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/session", label: "Session", icon: PlayCircle },
   { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/faq", label: "FAQ", icon: MessageCircle },
+  { href: "/messages", label: "Chat", icon: MessageCircle },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
@@ -30,11 +31,13 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setShowSafety(
       isAppRoute &&
+      sessionStorage.getItem("recoverx-safety-banner") !== "dismissed" &&
       sessionStorage.getItem("antigravity-safety-banner") !== "dismissed"
     );
   }, [isAppRoute, pathname]);
 
   function dismissBanner() {
+    sessionStorage.setItem("recoverx-safety-banner", "dismissed");
     sessionStorage.setItem("antigravity-safety-banner", "dismissed");
     setShowSafety(false);
   }
@@ -50,7 +53,9 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className={isAppRoute ? "pb-16 md:pb-0" : ""}
         >
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </motion.div>
       </AnimatePresence>
 

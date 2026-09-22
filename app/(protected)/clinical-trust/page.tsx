@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import { Brain, Database, FileCheck2, Microscope, ShieldCheck, Stethoscope } from "lucide-react";
+import { Brain, Database, FileCheck2, Microscope, ShieldCheck, Stethoscope, Sparkles } from "lucide-react";
+import JointVisualizer3D from "../../components/JointVisualizer3D";
 
 const references = [
   {
@@ -32,20 +35,33 @@ export default function ClinicalTrustPage() {
   return (
     <main className="relative min-h-screen overflow-hidden px-5 py-10 md:px-8">
       <div className="space-grid" />
-      <div className="relative z-10 mx-auto max-w-6xl pb-14">
-        <section className="mb-10 max-w-3xl">
-          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">Page 13 / Clinical Trust</p>
-          <h1 className="mt-3 font-display text-4xl font-semibold leading-tight text-[var(--text-1)] md:text-6xl">The science behind AntiGravity</h1>
+      <div className="relative z-10 mx-auto max-w-6xl pb-14 space-y-10">
+        <section className="max-w-3xl">
+          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">
+            Clinical Foundations & Biomechanical Evidence
+          </p>
+          <h1 className="mt-3 font-display text-4xl font-semibold leading-tight text-[var(--text-1)] md:text-6xl">
+            The Science Behind RecoverX
+          </h1>
           <p className="mt-5 text-lg leading-8 text-[var(--text-2)]">
-            RecoverX is designed as a recovery support layer: computer vision for movement tracking, guideline-aware exercise defaults, and transparent AI coaching.
+            RecoverX is designed as a clinical recovery support layer: computer vision for movement tracking, guideline-aware exercise defaults, real-time 3D joint kinematic simulation, and transparent AI coaching.
           </p>
         </section>
 
+        {/* ── 3D Interactive Biomechanics Model ── */}
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--primary)]">
+            <Sparkles className="w-4 h-4" /> Interactive 3D Kinematics Laboratory
+          </div>
+          <JointVisualizer3D angle={70} />
+        </section>
+
+        {/* ── Core Scientific Pillars ── */}
         <div className="grid gap-6 md:grid-cols-2">
           <TrustSection
             icon={Microscope}
             title="How We Measure"
-            body="We use MediaPipe BlazePose-style tracking to estimate body position from a webcam. The model family predicts 33 body landmarks and can run in real time on consumer devices. Validation varies by exercise, camera angle, and lighting; some studies report strong correlations up to r=0.97, while clinical movement papers also show meaningful error ranges. AntiGravity treats angles as coaching support, not a replacement for a clinician’s goniometer."
+            body="We use MediaPipe BlazePose-style tracking to estimate body position from a webcam. The model family predicts 33 body landmarks and can run in real time on consumer devices. Validation varies by exercise, camera angle, and lighting; some studies report strong correlations up to r=0.97, while clinical movement papers also show meaningful error ranges. RecoverX treats angles as coaching support, not a replacement for a clinician’s goniometer."
             link={{ href: "https://arxiv.org/abs/2006.10204", label: "Read the BlazePose paper" }}
           />
           <TrustSection
@@ -62,33 +78,35 @@ export default function ClinicalTrustPage() {
           <TrustSection
             icon={Database}
             title="Data & Privacy"
-            body="The app is structured for Supabase-backed storage with row-level access controls, TLS-protected transport, and platform compliance controls. Users can download or delete their data from Settings. AntiGravity does not sell recovery data."
+            body="The app is structured for Supabase-backed storage with row-level access controls, TLS-protected transport, and platform compliance controls. Users can download or delete their data from Settings. RecoverX does not sell recovery data."
             link={{ href: "https://supabase.com/docs/guides/security", label: "Supabase security docs" }}
           />
         </div>
 
-        <section className="card mt-6 border-[rgba(239,68,68,0.24)] bg-[rgba(239,68,68,0.05)] p-6">
+        {/* ── Scope of Practice ── */}
+        <section className="card border-[rgba(239,68,68,0.24)] bg-[rgba(239,68,68,0.05)] p-6">
           <div className="flex gap-4">
             <Stethoscope className="h-8 w-8 shrink-0 text-[var(--danger)]" />
             <div>
               <h2 className="font-display text-2xl font-semibold text-[var(--text-1)]">What We Are Not</h2>
               <p className="mt-3 leading-7 text-[var(--text-2)]">
-                RecoverX is not a diagnostic tool, not FDA-approved, and not a replacement for physiotherapy. It should support the plan your licensed clinician already gave you.
+                RecoverX is not a diagnostic medical device, not FDA-approved as a primary diagnostic tool, and not a replacement for human physiotherapy. It is an auxiliary software assistant designed to reinforce the physical therapy protocol prescribed by your licensed orthopedist.
               </p>
             </div>
           </div>
         </section>
 
-        <section className="card mt-6 p-6">
+        {/* ── References ── */}
+        <section className="card p-6">
           <div className="mb-4 flex items-center gap-3">
             <ShieldCheck className="h-6 w-6 text-[var(--accent)]" />
-            <h2 className="font-display text-2xl font-semibold text-[var(--text-1)]">References</h2>
+            <h2 className="font-display text-2xl font-semibold text-[var(--text-1)]">References & Validation Literature</h2>
           </div>
           <ol className="list-decimal space-y-3 pl-5 text-sm text-[var(--text-2)]">
             {references.map((reference) => (
               <li key={reference.href}>
-                <Link href={reference.href} className="text-[var(--primary)] hover:text-[var(--primary-dark)]">
-                  {reference.label}
+                <Link href={reference.href} target="_blank" rel="noopener noreferrer" className="text-[var(--primary)] hover:text-[var(--primary-dark)] transition">
+                  {reference.label} →
                 </Link>
               </li>
             ))}
@@ -101,12 +119,14 @@ export default function ClinicalTrustPage() {
 
 function TrustSection({ icon: Icon, title, body, link }: { icon: typeof Microscope; title: string; body: string; link?: { href: string; label: string } }) {
   return (
-    <section className="card p-6">
-      <Icon className="mb-4 h-8 w-8 text-[var(--primary)]" />
-      <h2 className="font-display text-2xl font-semibold text-[var(--text-1)]">{title}</h2>
-      <p className="mt-3 leading-7 text-[var(--text-2)]">{body}</p>
+    <section className="card p-6 flex flex-col justify-between">
+      <div>
+        <Icon className="mb-4 h-8 w-8 text-[var(--primary)]" />
+        <h2 className="font-display text-2xl font-semibold text-[var(--text-1)]">{title}</h2>
+        <p className="mt-3 leading-7 text-[var(--text-2)] text-sm">{body}</p>
+      </div>
       {link && (
-        <Link href={link.href} className="mt-4 inline-flex text-sm text-[var(--primary)] hover:text-[var(--primary-dark)]">
+        <Link href={link.href} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex text-xs font-semibold text-[var(--primary)] hover:underline">
           {link.label} →
         </Link>
       )}

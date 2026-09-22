@@ -91,7 +91,7 @@ export default function OnboardingPage() {
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="font-display font-bold text-4xl text-[var(--text-1)] mb-4">Let&apos;s personalize your recovery</h1>
-          <p className="font-body text-lg text-[var(--text-3)]">This helps AntiGravity build your exact exercise protocol.</p>
+          <p className="font-body text-lg text-[var(--text-3)]">This helps RecoverX build your exact exercise protocol.</p>
         </div>
 
         {/* Form Card */}

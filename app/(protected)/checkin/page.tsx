@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Check, Moon, Sparkles } from "lucide-react";
 import { createNotification } from "../../components/NotificationBell";
+import { getGeminiApiKey } from "../../lib/supabase";
 
 type Swelling = "None" | "Mild" | "Moderate" | "Severe";
 type Mood = "Great" | "Good" | "Okay" | "Low";
@@ -37,16 +38,23 @@ function painTone(pain: number) {
 }
 
 async function saveCheckin(payload: Record<string, unknown>) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("recoverx-latest-checkin", JSON.stringify(payload));
+    window.localStorage.setItem(`recoverx-checkin-${Date.now()}`, JSON.stringify(payload));
     window.localStorage.setItem(`antigravity-checkin-${Date.now()}`, JSON.stringify(payload));
-    return;
   }
 
-  const { createClient } = await import("@supabase/supabase-js");
-  const supabase = createClient(url, key);
-  await supabase.from("daily_checkins").insert(payload);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return;
+
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(url, key);
+    await supabase.from("daily_checkins").insert(payload);
+  } catch (err) {
+    console.warn("Supabase checkin insert skipped:", err);
+  }
 }
 
 export default function CheckinPage() {
@@ -83,7 +91,7 @@ export default function CheckinPage() {
           : `Thanks for checking in. Keep movements calm today and listen to your knee.`;
 
     let text = fallback;
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = getGeminiApiKey();
 
     if (apiKey) {
       try {

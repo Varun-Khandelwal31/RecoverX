@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Zap, Star, Shield, Crown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, Zap, Star, Shield, Crown, X, CheckCircle2, CreditCard } from "lucide-react";
+import { getUser, updateUser } from "../../lib/auth";
 
 type Cycle = "weekly" | "monthly";
 
@@ -83,7 +84,38 @@ const plans = [
 
 export default function SubscriptionPage() {
   const [cycle, setCycle] = useState<Cycle>("monthly");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string>("pro");
+  const [checkoutPlan, setCheckoutPlan] = useState<typeof plans[0] | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"upi" | "card">("upi");
+  const [paying, setPaying] = useState(false);
+  const [paySuccess, setPaySuccess] = useState(false);
+
+  useEffect(() => {
+    const u = getUser();
+    if (u?.plan) {
+      setCurrentPlan(u.plan);
+    }
+  }, []);
+
+  const handleActivatePlan = (plan: typeof plans[0]) => {
+    setCheckoutPlan(plan);
+    setPaySuccess(false);
+  };
+
+  const handleConfirmPayment = () => {
+    if (!checkoutPlan) return;
+    setPaying(true);
+    setTimeout(() => {
+      setPaying(false);
+      setPaySuccess(true);
+      updateUser({ plan: checkoutPlan.id as "basic" | "pro" | "clinic" });
+      setCurrentPlan(checkoutPlan.id);
+      setTimeout(() => {
+        setCheckoutPlan(null);
+        setPaySuccess(false);
+      }, 1400);
+    }, 900);
+  };
 
   return (
     <div
@@ -194,7 +226,7 @@ export default function SubscriptionPage() {
         {plans.map((plan) => {
           const price = cycle === "weekly" ? plan.weeklyPrice : plan.monthlyPrice;
           const isPro = plan.id === "pro";
-          const isSelected = selected === plan.id;
+          const isSelected = currentPlan === plan.id;
 
           return (
             <div
@@ -381,74 +413,179 @@ export default function SubscriptionPage() {
               </ul>
 
               {/* CTA button */}
-              <button
-                onClick={() => setSelected(plan.id)}
-                style={{
-                  width: "100%",
-                  padding: "13px 20px",
-                  borderRadius: 999,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  fontFamily: "var(--font-display)",
-                  cursor: "pointer",
-                  border: plan.ctaStyle === "outline" ? "1.5px solid var(--primary)" : "none",
-                  background:
-                    plan.ctaStyle === "primary"
-                      ? "var(--primary)"
-                      : plan.ctaStyle === "accent"
-                      ? "var(--accent)"
-                      : "transparent",
-                  color:
-                    plan.ctaStyle === "outline" ? "var(--primary)" : "#fff",
-                  boxShadow:
-                    plan.ctaStyle === "primary"
-                      ? "0 4px 16px rgba(26,110,189,0.35)"
-                      : plan.ctaStyle === "accent"
-                      ? "0 4px 16px rgba(14,168,116,0.30)"
-                      : "none",
-                  transition: "all 0.18s",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-                onMouseEnter={(e) => {
-                  if (plan.ctaStyle === "primary") e.currentTarget.style.background = "var(--primary-dark)";
-                  if (plan.ctaStyle === "accent") e.currentTarget.style.background = "var(--accent-dark)";
-                  if (plan.ctaStyle === "outline") e.currentTarget.style.background = "var(--primary-light)";
-                }}
-                onMouseLeave={(e) => {
-                  if (plan.ctaStyle === "primary") e.currentTarget.style.background = "var(--primary)";
-                  if (plan.ctaStyle === "accent") e.currentTarget.style.background = "var(--accent)";
-                  if (plan.ctaStyle === "outline") e.currentTarget.style.background = "transparent";
-                }}
-              >
-                {isPro && <Crown style={{ width: 14, height: 14 }} />}
-                {plan.cta} →
-              </button>
-
-              {/* Selected confirmation */}
-              {isSelected && (
+              {currentPlan === plan.id ? (
                 <div
                   style={{
-                    marginTop: 12,
+                    width: "100%",
+                    padding: "13px 20px",
+                    borderRadius: 999,
+                    fontSize: 13,
+                    fontWeight: 700,
                     textAlign: "center",
-                    fontSize: 12,
-                    color: "var(--accent-dark)",
-                    fontWeight: 600,
                     background: "var(--accent-light)",
-                    border: "1px solid rgba(14,168,116,0.25)",
-                    borderRadius: 8,
-                    padding: "7px 12px",
+                    color: "var(--accent-dark)",
+                    border: "1.5px solid var(--accent)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
                   }}
                 >
-                  ✅ Plan selected — payment coming soon
+                  <CheckCircle2 style={{ width: 16, height: 16, color: "var(--accent)" }} />
+                  Current Active Plan
                 </div>
+              ) : (
+                <button
+                  onClick={() => handleActivatePlan(plan)}
+                  style={{
+                    width: "100%",
+                    padding: "13px 20px",
+                    borderRadius: 999,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    fontFamily: "var(--font-display)",
+                    cursor: "pointer",
+                    border: plan.ctaStyle === "outline" ? "1.5px solid var(--primary)" : "none",
+                    background:
+                      plan.ctaStyle === "primary"
+                        ? "var(--primary)"
+                        : plan.ctaStyle === "accent"
+                        ? "var(--accent)"
+                        : "transparent",
+                    color:
+                      plan.ctaStyle === "outline" ? "var(--primary)" : "#fff",
+                    boxShadow:
+                      plan.ctaStyle === "primary"
+                        ? "0 4px 16px rgba(26,110,189,0.35)"
+                        : plan.ctaStyle === "accent"
+                        ? "0 4px 16px rgba(14,168,116,0.30)"
+                        : "none",
+                    transition: "all 0.18s",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (plan.ctaStyle === "primary") e.currentTarget.style.background = "var(--primary-dark)";
+                    if (plan.ctaStyle === "accent") e.currentTarget.style.background = "var(--accent-dark)";
+                    if (plan.ctaStyle === "outline") e.currentTarget.style.background = "var(--primary-light)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (plan.ctaStyle === "primary") e.currentTarget.style.background = "var(--primary)";
+                    if (plan.ctaStyle === "accent") e.currentTarget.style.background = "var(--accent)";
+                    if (plan.ctaStyle === "outline") e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  {isPro && <Crown style={{ width: 14, height: 14 }} />}
+                  {plan.cta} →
+                </button>
               )}
             </div>
           );
         })}
       </div>
+
+      {/* Checkout Modal */}
+      {checkoutPlan && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6 bg-[var(--bg-card)] border border-[var(--border)] shadow-2xl space-y-5"
+            style={{ background: "#ffffff" }}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2.5">
+                <div className="text-2xl">{checkoutPlan.icon}</div>
+                <div>
+                  <h3 className="font-display font-bold text-lg text-[var(--text-1)]">
+                    Upgrade to {checkoutPlan.name}
+                  </h3>
+                  <div className="text-xs text-[var(--text-3)]">
+                    {cycle === "weekly" ? "Weekly Membership" : "Monthly Membership"}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setCheckoutPlan(null)}
+                className="p-1 rounded-full text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--bg-hover)] transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {paySuccess ? (
+              <div className="py-8 text-center space-y-3">
+                <div className="w-14 h-14 rounded-full bg-[var(--accent-light)] text-[var(--accent)] mx-auto flex items-center justify-center animate-bounce">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <h4 className="font-display font-bold text-lg text-[var(--text-1)]">
+                  Plan Activated Successfully!
+                </h4>
+                <p className="text-xs text-[var(--text-3)]">
+                  Your RecoverX tier is now updated to {checkoutPlan.name}.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="p-4 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] flex items-center justify-between">
+                  <span className="text-xs text-[var(--text-2)]">Amount Payable</span>
+                  <div className="text-right">
+                    <span className="font-display font-black text-2xl text-[var(--text-1)]">
+                      ₹{cycle === "weekly" ? checkoutPlan.weeklyPrice : checkoutPlan.monthlyPrice}
+                    </span>
+                    <span className="text-[11px] text-[var(--text-3)]">
+                      /{cycle === "weekly" ? "wk" : "mo"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-[var(--text-2)]">Select Payment Method</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("upi")}
+                      className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                        paymentMethod === "upi"
+                          ? "border-[var(--primary)] bg-[var(--primary-light)] text-[var(--primary)]"
+                          : "border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--bg-hover)]"
+                      }`}
+                    >
+                      <span>⚡</span> UPI / GPay / PhonePe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("card")}
+                      className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                        paymentMethod === "card"
+                          ? "border-[var(--primary)] bg-[var(--primary-light)] text-[var(--primary)]"
+                          : "border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--bg-hover)]"
+                      }`}
+                    >
+                      <CreditCard className="w-3.5 h-3.5" /> Credit / Debit Card
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmPayment}
+                  disabled={paying}
+                  className="w-full py-3 rounded-xl font-display font-bold text-sm bg-[var(--primary)] text-white hover:opacity-90 transition shadow-md disabled:opacity-50"
+                >
+                  {paying ? "Authorizing Instant Activation..." : `Pay ₹${cycle === "weekly" ? checkoutPlan.weeklyPrice : checkoutPlan.monthlyPrice} & Activate`}
+                </button>
+                <div className="text-[10px] text-center text-[var(--text-3)]">
+                  🔒 256-Bit Encrypted Simulated Razorpay Sandbox
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── TRUST STRIP ── */}
       <div

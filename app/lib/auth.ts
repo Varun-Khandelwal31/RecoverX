@@ -17,19 +17,23 @@ export interface AuthUser {
   side?: string;
   surgeon?: string;
   hospital?: string;
+  plan?: string;
+  accessCode?: string;
 }
 
-const KEY = "ag_user";
+const KEY = "recoverx_user";
+const LEGACY_KEY = "ag_user";
 
 export function saveUser(user: AuthUser): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(KEY, JSON.stringify(user));
+  localStorage.setItem(LEGACY_KEY, JSON.stringify(user));
 }
 
 export function getUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY) || localStorage.getItem(LEGACY_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as AuthUser;
   } catch {
@@ -46,6 +50,7 @@ export function updateUser(patch: Partial<AuthUser>): void {
 export function clearUser(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(KEY);
+  localStorage.removeItem(LEGACY_KEY);
 }
 
 /** Returns initials (up to 2 chars) from a full name */

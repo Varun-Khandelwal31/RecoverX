@@ -13,6 +13,7 @@ import { getUser } from "../../lib/auth";
 type Session = {
   id: number;
   started_at: string;
+  ended_at?: string;
   exercise_name: string;
   duration_seconds: number;
   achieved_angle: number;
@@ -115,7 +116,7 @@ function downloadPassport(sessions: Session[], checkins: Checkin[], patientName:
   .footer { font-size: 11px; color: #7A94AD; text-align: center; margin-top: 40px; border-top: 1px solid #D8E6F0; padding-top: 16px; }
 </style></head><body>
 <div class="header">
-  <h1>AntiGravity Recovery Passport</h1>
+  <h1>RecoverX Clinical Recovery Passport</h1>
   <p>Generated ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} · Patient: ${patientName}</p>
 </div>
 <div class="stats">
@@ -129,14 +130,14 @@ function downloadPassport(sessions: Session[], checkins: Checkin[], patientName:
   <thead><tr><th>Date</th><th>Exercise</th><th>Best Angle</th><th>Reps</th><th>Pain After</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>
-<div class="footer">⚕ AntiGravity is an AI-assisted support tool. This document does not constitute medical advice. Always follow your licensed physiotherapist's guidance.</div>
+<div class="footer">⚕ RecoverX is an AI-assisted clinical rehabilitation tool. This document does not constitute medical advice. Always follow your licensed physiotherapist's guidance.</div>
 </body></html>`;
 
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `AntiGravity-Recovery-Passport-${new Date().toISOString().slice(0, 10)}.html`;
+  a.download = `RecoverX-Recovery-Passport-${new Date().toISOString().slice(0, 10)}.html`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -195,17 +196,65 @@ export default function ActivityPage() {
             setCheckins(FALLBACK_CHECKINS);
           }
         } else {
-          // Try localStorage
-          const keys = Object.keys(localStorage).filter(k => k.startsWith("antigravity-session-"));
-          if (keys.length > 0) {
-            const local = keys.map(k => JSON.parse(localStorage.getItem(k)!)).sort((a, b) =>
-              new Date(a.ended_at ?? 0).getTime() - new Date(b.ended_at ?? 0).getTime()
+          // Try localStorage safely
+          const keys = Object.keys(localStorage).filter(k => 
+            (k.startsWith("recoverx-session-") || k.startsWith("antigravity-session-")) &&
+            !k.endsWith("-completed")
+          );
+          const parsedSessions: Partial<Session>[] = [];
+          for (const k of keys) {
+            try {
+              const raw = localStorage.getItem(k);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                  parsedSessions.push(parsed as Partial<Session>);
+                }
+              }
+            } catch (err) {
+              console.warn("Invalid session item in storage:", k, err);
+            }
+          }
+          if (parsedSessions.length > 0) {
+            const local = parsedSessions.sort((a, b) =>
+              new Date(a.ended_at ?? a.started_at ?? 0).getTime() - new Date(b.ended_at ?? b.started_at ?? 0).getTime()
             );
-            setSessions(local.map((s, i) => ({ ...s, id: i + 1, week: s.week_number ?? 1, angle_log: s.angle_log ?? [], feedback_log: s.feedback_log ?? [], notes: "" })));
+            setSessions(local.map((s, i) => ({
+              id: s.id ?? i + 1,
+              started_at: s.started_at ?? s.ended_at ?? new Date().toISOString(),
+              ended_at: s.ended_at,
+              exercise_name: s.exercise_name ?? "Exercise",
+              duration_seconds: s.duration_seconds ?? 300,
+              achieved_angle: s.achieved_angle ?? 0,
+              target_angle: s.target_angle ?? 90,
+              rep_count: s.rep_count ?? 10,
+              correct_reps: s.correct_reps ?? 10,
+              pain_before: s.pain_before ?? 2,
+              pain_after: s.pain_after ?? 2,
+              status: s.status ?? "COMPLETED",
+              week: s.week ?? Math.floor(i / 5) + 1,
+              angle_log: s.angle_log ?? [],
+              feedback_log: s.feedback_log ?? [],
+              notes: s.notes ?? "",
+            })));
           } else {
             setSessions(FALLBACK_SESSIONS);
           }
-          setCheckins(FALLBACK_CHECKINS);
+
+          const savedLatestCheckin = localStorage.getItem("recoverx-latest-checkin");
+          if (savedLatestCheckin) {
+            try {
+              const parsed = JSON.parse(savedLatestCheckin);
+              setCheckins([
+                ...FALLBACK_CHECKINS.slice(1),
+                { date: parsed?.date || new Date().toISOString().slice(0, 10), pain: Number(parsed?.painScore ?? 3) }
+              ]);
+            } catch {
+              setCheckins(FALLBACK_CHECKINS);
+            }
+          } else {
+            setCheckins(FALLBACK_CHECKINS);
+          }
         }
       } catch {
         setSessions(FALLBACK_SESSIONS);
@@ -356,8 +405,21 @@ export default function ActivityPage() {
                   <ReferenceArea y1={7} y2={10} fill="var(--danger)" fillOpacity={0.07}
                     label={{ value: "high pain zone", fill: "var(--danger)", fontSize: 11 }} />
                   <Line type="monotone" dataKey="pain" stroke="var(--danger)" strokeWidth={2}
-                    dot={(props) => <circle cx={props.cx} cy={props.cy} r={5}
-                      fill={painColor(Number(props.payload.pain))} stroke="#fff" strokeWidth={2} />} />
+                    dot={(props: { cx?: number; cy?: number; payload?: { pain?: number } }) => {
+                      if (!props || !props.payload) return <circle key={`pain-dot-${props?.cx ?? 0}`} cx={props?.cx ?? 0} cy={props?.cy ?? 0} r={0} />;
+                      const val = Number(props.payload.pain ?? 0);
+                      return (
+                        <circle
+                          key={`pain-dot-${props.cx}-${props.cy}`}
+                          cx={props.cx}
+                          cy={props.cy}
+                          r={5}
+                          fill={painColor(val)}
+                          stroke="#fff"
+                          strokeWidth={2}
+                        />
+                      );
+                    }} />
                 </LineChart>
               </ResponsiveContainer>
             )}

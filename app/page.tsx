@@ -42,7 +42,7 @@ const FEATURES = [
 
 const TESTIMONIALS = [
   {
-    q: "The skeleton overlay showed me I was doing my knee bends completely wrong. AntiGravity caught it on the first rep.",
+    q: "The skeleton overlay showed me I was doing my knee bends completely wrong. RecoverX caught it on the first rep.",
     n: "Arjun M.", sub: "ACL Reconstruction · Week 4",
   },
   {
@@ -221,44 +221,29 @@ export default function Home() {
               }} />
             </div>
 
-            {/* Floating angle card */}
+            {/* LIVE badge floating on top border */}
             <div style={{
-              position: "absolute", bottom: 28, left: -20,
-              background: "#fff", border: "1px solid var(--border)",
-              borderRadius: "var(--r-lg)", padding: "14px 20px",
-              boxShadow: "var(--shadow-lg)",
-              animation: "float 3.5s ease-in-out infinite",
-            }}>
-              <div style={{ fontFamily: "var(--font-data)", fontSize: 40, color: "var(--accent)", lineHeight: 1, fontWeight: 500 }}>72°</div>
-              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>Knee angle · Target 90°</div>
-              <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: "#EDF2F7", overflow: "hidden" }}>
-                <div style={{ width: "80%", height: "100%", borderRadius: 2, background: "linear-gradient(90deg, var(--primary), var(--accent))" }} />
-              </div>
-            </div>
-
-            {/* LIVE badge */}
-            <div style={{
-              position: "absolute", top: 20, right: 20,
+              position: "absolute", top: -14, right: 28, zIndex: 25,
               background: "#fff", border: "1px solid #FFD5D5",
-              borderRadius: "var(--r-full)", padding: "5px 12px",
+              borderRadius: "var(--r-full)", padding: "5px 14px",
               display: "flex", alignItems: "center", gap: 6,
               fontSize: 12, fontWeight: 700, color: "var(--danger)",
-              boxShadow: "var(--shadow-sm)",
+              boxShadow: "0 4px 14px rgba(239,68,68,0.15)",
               animation: "float-slow 4s 1s ease-in-out infinite",
             }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--danger)", animation: "pulse-dot 1.5s infinite" }} />
-              LIVE
+              LIVE SIMULATION
             </div>
 
-            {/* Tracking badge */}
+            {/* Tracking badge floating on bottom border */}
             <div style={{
-              position: "absolute", bottom: 28, right: -16,
-              background: "var(--accent-light)", border: "1px solid rgba(14,168,116,0.3)",
+              position: "absolute", bottom: -14, right: 28, zIndex: 25,
+              background: "#fff", border: "1px solid rgba(14,168,116,0.3)",
               borderRadius: "var(--r-full)", padding: "6px 14px",
               fontSize: 12, fontWeight: 600, color: "var(--accent-dark)",
-              boxShadow: "var(--shadow-sm)",
+              boxShadow: "0 4px 14px rgba(14,168,116,0.15)",
             }}>
-              ● 33 joints tracked
+              ● 33-point MediaPipe Tracking
             </div>
           </div>
         </section>

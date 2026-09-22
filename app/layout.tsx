@@ -22,8 +22,8 @@ const fontData = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AntiGravity | Post-Surgery Remote Rehab",
-  description: "Your recovery, watched by AI. Powered by Google Gemini and MediaPipe.",
+  title: "RecoverX | AI-Powered Post-Surgery Rehabilitation Assistant",
+  description: "Clinical-grade AI physiotherapy with real-time pose tracking, medical report parsing, hands-free voice coaching, and physician connectivity.",
 };
 
 export default function RootLayout({

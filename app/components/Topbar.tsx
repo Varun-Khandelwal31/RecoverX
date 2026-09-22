@@ -12,12 +12,15 @@ const getPageTitle = (pathname: string) => {
   if (pathname.includes("/activity"))      return "Activity & Progress";
   if (pathname.includes("/reports"))       return "Medical Reports";
   if (pathname.includes("/checkin"))       return "Daily Check-in";
+  if (pathname.includes("/messages"))      return "Care Team Chat";
   if (pathname.includes("/faq"))           return "AI Coach FAQ";
   if (pathname.includes("/find-doctors"))  return "Find Doctors";
+  if (pathname.includes("/subscription"))  return "Subscription & Plans";
+  if (pathname.includes("/clinical-trust")) return "Clinical Trust & Science";
   if (pathname.includes("/emergency"))     return "Emergency";
   if (pathname.includes("/profile"))       return "Patient Profile";
   if (pathname.includes("/settings"))      return "Settings";
-  return "AntiGravity";
+  return "RecoverX";
 };
 
 export default function Topbar() {

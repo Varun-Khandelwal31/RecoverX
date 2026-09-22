@@ -1,10 +1,11 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { CalendarDays, CheckCircle2, FileText, PlayCircle, RotateCcw, UploadCloud } from "lucide-react";
+import { CalendarDays, CheckCircle2, FileText, PlayCircle, RotateCcw, Sparkles, UploadCloud } from "lucide-react";
 import { createNotification } from "../../components/NotificationBell";
+import { getGeminiApiKey } from "../../lib/supabase";
 
 type UploadStatus = "idle" | "reading" | "done" | "error";
 
@@ -153,6 +154,34 @@ export default function ReportsPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isDragActive, setIsDragActive] = useState(false);
 
+  // Load existing active report on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("recoverx-active-report") || localStorage.getItem("antigravity-active-report");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.surgeryType) {
+          setExtractedData(parsed);
+          setStatus("done");
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function loadDemoReport() {
+    setStatus("reading");
+    setErrorMessage("");
+    setTimeout(() => {
+      setExtractedData(demoReport);
+      localStorage.setItem("recoverx-active-report", JSON.stringify(demoReport));
+      localStorage.setItem("antigravity-active-report", JSON.stringify(demoReport));
+      createNotification("REPORT_READY", "Clinical Report Loaded", "Sample surgical discharge summary extracted successfully.", "/reports");
+      setStatus("done");
+    }, 600);
+  }
+
   const followUpDays = useMemo(() => daysUntil(extractedData?.followUpDate ?? null), [extractedData]);
 
   async function processReport(file: File) {
@@ -186,7 +215,7 @@ export default function ReportsPage() {
       }
 
       let extracted: ExtractedReport = demoReport;
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      const apiKey = getGeminiApiKey();
 
       if (apiKey) {
         const base64 = await fileToBase64(file);
@@ -232,6 +261,9 @@ export default function ReportsPage() {
         await new Promise((resolve) => window.setTimeout(resolve, 1200));
       }
 
+      window.localStorage.setItem("recoverx-active-report", JSON.stringify(extracted));
+      window.localStorage.setItem("antigravity-active-report", JSON.stringify(extracted));
+
       if (supabase) {
         try {
           await supabase.from("medical_reports").update({
@@ -247,11 +279,8 @@ export default function ReportsPage() {
             target_rom: extracted.allowedROM?.max || 90,
           }).eq("user_id", userId);
         } catch {
-          // DB unavailable — fall through to localStorage
-          window.localStorage.setItem("antigravity-active-report", JSON.stringify(extracted));
+          // DB error fallback
         }
-      } else {
-        window.localStorage.setItem("antigravity-active-report", JSON.stringify(extracted));
       }
 
       setExtractedData(extracted);
@@ -290,8 +319,8 @@ export default function ReportsPage() {
       <div className="space-grid" />
       <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-8 pb-12">
         <header>
-          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">Page 7 / Medical Report</p>
-          <h1 className="mt-2 font-display text-3xl font-semibold text-[var(--text-1)] md:text-4xl">Medical report intelligence</h1>
+          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">Clinical Intelligence · Surgical Report OCR & Protocol Analysis</p>
+          <h1 className="mt-2 font-display text-3xl font-semibold text-[var(--text-1)] md:text-4xl">Medical Report Intelligence</h1>
         </header>
 
         {status === "idle" || status === "error" ? (
@@ -317,10 +346,24 @@ export default function ReportsPage() {
               <div className="mb-4 text-5xl">📋</div>
               <h3 className="font-display text-2xl font-semibold text-[var(--text-1)]">Drop your medical report here</h3>
               <p className="mt-2 text-[var(--text-3)]">PDF, JPG, PNG, HEIC · Max 10MB</p>
-              <button type="button" className="btn-ghost mt-5 inline-flex items-center gap-2 px-6 py-3 text-sm">
-                <UploadCloud className="h-4 w-4" />
-                Browse Files
-              </button>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-ghost inline-flex items-center gap-2 px-5 py-2.5 text-sm"
+                >
+                  <UploadCloud className="h-4 w-4" />
+                  Browse Files
+                </button>
+                <button
+                  type="button"
+                  onClick={loadDemoReport}
+                  className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-sm bg-gradient-to-r from-sky-600 to-emerald-600 border-none shadow-md hover:opacity-95"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Load Sample Clinical Report (Demo)
+                </button>
+              </div>
             </div>
 
             {status === "error" && (

@@ -10,7 +10,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, CartesianGrid,
 } from "recharts";
-import { getBrowserSupabase, DEMO_USER } from "../../lib/supabase";
+import { getBrowserSupabase, DEMO_USER, getLocalSessions } from "../../lib/supabase";
 import { getUser } from "../../lib/auth";
 
 const FALLBACK_ROM = [
@@ -131,7 +131,6 @@ function LightTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
-
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [painScore, setPainScore] = useState(4);
@@ -153,48 +152,81 @@ export default function DashboardPage() {
           setStats(prev => ({ ...prev, week: localUser.week ?? 3 }));
         }
 
+        // 1. Read local sessions
+        const localSessions = getLocalSessions();
+
+        // 2. Check local check-in
+        let localCheckinPain = -1;
+        try {
+          const rawCheckin = localStorage.getItem("recoverx-latest-checkin");
+          if (rawCheckin) {
+            const parsed = JSON.parse(rawCheckin);
+            if (typeof parsed.pain_score === "number") localCheckinPain = parsed.pain_score;
+          }
+        } catch { /* ignore */ }
+
         const sb = await getBrowserSupabase();
+        let dbSessions = null;
+
         if (sb) {
-          const [{ data: sessData }, { data: profile }, { data: checkin }] = await Promise.all([
-            sb.from("exercise_sessions")
-              .select("started_at, exercise_name, achieved_angle, correct_reps, rep_count, status")
-              .eq("user_id", DEMO_USER)
-              .order("started_at", { ascending: false })
-              .limit(20),
-            sb.from("patient_profiles").select("full_name, current_week").eq("user_id", DEMO_USER).single(),
-            sb.from("daily_checkins").select("pain_score").eq("user_id", DEMO_USER).order("created_at", { ascending: false }).limit(1).single(),
-          ]);
+          try {
+            const [{ data: sessData }, { data: profile }, { data: checkin }] = await Promise.all([
+              sb.from("exercise_sessions")
+                .select("started_at, exercise_name, achieved_angle, correct_reps, rep_count, status")
+                .eq("user_id", localUser?.id || DEMO_USER)
+                .order("started_at", { ascending: false })
+                .limit(20),
+              sb.from("patient_profiles").select("full_name, current_week").eq("user_id", localUser?.id || DEMO_USER).single(),
+              sb.from("daily_checkins").select("pain_score").eq("user_id", localUser?.id || DEMO_USER).order("created_at", { ascending: false }).limit(1).single(),
+            ]);
 
-          if (profile && !localUser) {
-            setPatientName(profile.full_name?.split(" ")[0] ?? "Arjun");
-            setStats(prev => ({ ...prev, week: profile.current_week ?? 3 }));
+            if (profile && !localUser) {
+              setPatientName(profile.full_name?.split(" ")[0] ?? "Arjun");
+              setStats(prev => ({ ...prev, week: profile.current_week ?? 3 }));
+            }
+            if (checkin && typeof checkin.pain_score === "number") {
+              localCheckinPain = checkin.pain_score;
+            }
+            dbSessions = sessData;
+          } catch {
+            // Supabase query error - fallback to local
           }
-          if (checkin) {
-            setStats(prev => ({ ...prev, pain: checkin.pain_score ?? -1 }));
-          }
-          if (sessData && sessData.length > 0) {
-            const todaySessions = sessData.filter(s => new Date(s.started_at).toDateString() === new Date().toDateString());
-            const completedToday = todaySessions.filter(s => s.status === "COMPLETED");
-            const bestToday = completedToday.length ? Math.max(...completedToday.map(s => s.achieved_angle)) : 0;
-            setStats(prev => ({ ...prev, sessions: completedToday.length, bestAngle: bestToday }));
+        }
 
-            const romPoints = [...sessData].reverse().slice(-14).map(s => ({
-              date: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(s.started_at)),
-              achieved: s.achieved_angle,
-            }));
-            if (romPoints.length > 0) setRomData(romPoints);
+        // Combine DB & Local sessions
+        const allSessions = (dbSessions && dbSessions.length > 0) ? dbSessions : localSessions;
 
-            setRecentSessions(sessData.slice(0, 3).map(s => ({
-              d: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(s.started_at)),
-              e: s.exercise_name,
-              a: `${s.achieved_angle}°`,
-              r: `${s.correct_reps}/${s.rep_count}`,
-              s: s.status === "COMPLETED" ? "Completed" : "Abandoned",
-              badge: s.status === "COMPLETED" ? "badge-green" : "badge-gray",
-            })));
-          } else {
-            setRecentSessions(FALLBACK_RECENT);
-          }
+        if (localCheckinPain >= 0) {
+          setStats(prev => ({ ...prev, pain: localCheckinPain }));
+        }
+
+        if (allSessions && allSessions.length > 0) {
+          const todaySessions = allSessions.filter(s => new Date(s.started_at).toDateString() === new Date().toDateString());
+          const completedToday = todaySessions.filter(s => s.status === "COMPLETED");
+          const bestToday = completedToday.length
+            ? Math.max(...completedToday.map(s => s.achieved_angle))
+            : Math.max(...allSessions.map(s => s.achieved_angle));
+
+          setStats(prev => ({
+            ...prev,
+            sessions: Math.max(completedToday.length, localSessions.length > 0 ? localSessions.length : 1),
+            bestAngle: bestToday,
+          }));
+
+          const romPoints = [...allSessions].reverse().slice(-14).map(s => ({
+            date: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(s.started_at)),
+            achieved: s.achieved_angle,
+          }));
+          if (romPoints.length > 0) setRomData(romPoints);
+
+          setRecentSessions(allSessions.slice(0, 4).map(s => ({
+            d: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(s.started_at)),
+            e: s.exercise_name,
+            a: `${s.achieved_angle}°`,
+            r: `${s.correct_reps}/${s.rep_count}`,
+            s: s.status === "COMPLETED" ? "Completed" : "In Progress",
+            badge: s.status === "COMPLETED" ? "badge-green" : "badge-gray",
+          })));
         } else {
           setRecentSessions(FALLBACK_RECENT);
         }
@@ -206,52 +238,32 @@ export default function DashboardPage() {
     }
     load();
 
-    // Refetch on window focus — catches tab-switch-back after session
+    // Refetch on window focus
     const onFocus = () => {
-      const flag = window.localStorage.getItem("antigravity-session-completed");
-      if (flag) {
-        window.localStorage.removeItem("antigravity-session-completed");
-        load();
-      } else {
-        load();
-      }
+      load();
     };
     window.addEventListener("focus", onFocus);
 
-    // localStorage event — catches same-tab navigation back from session page
+    // localStorage events
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "antigravity-session-completed") {
-        window.localStorage.removeItem("antigravity-session-completed");
+      if (
+        e.key === "recoverx-session-completed" ||
+        e.key === "antigravity-session-completed" ||
+        e.key === "recoverx-latest-checkin"
+      ) {
         load();
       }
     };
     window.addEventListener("storage", onStorage);
 
-    // Custom event — fired immediately after session save in same tab
+    // Custom event fired immediately on session save in same tab
     const onSessionCompleted = () => load();
     window.addEventListener("session-completed", onSessionCompleted);
-
-    // Supabase realtime subscription
-    let cleanup: (() => void) | undefined;
-    getBrowserSupabase().then(sb => {
-      if (!sb) return;
-      sb.removeAllChannels();
-      const channel = sb
-        .channel("dashboard-session-updates")
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "exercise_sessions", filter: `user_id=eq.${DEMO_USER}` },
-          () => load()
-        )
-        .subscribe();
-      cleanup = () => sb.removeChannel(channel);
-    });
 
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("session-completed", onSessionCompleted);
-      cleanup?.();
     };
   }, []);
 

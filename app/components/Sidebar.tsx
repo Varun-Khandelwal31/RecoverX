@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   LayoutGrid, PlayCircle, BarChart2, FileText,
-  CalendarHeart, MessageCircle, User, Settings, LogOut,
+  CalendarHeart, MessageCircle, MessagesSquare, User, Settings, LogOut,
   MapPin, AlertTriangle, CreditCard,
 } from "lucide-react";
 import { getUser, clearUser, getInitials } from "../lib/auth";
@@ -16,6 +16,7 @@ const mainLinks = [
   { href: "/activity", label: "Activity", icon: BarChart2 },
   { href: "/reports", label: "My Report", icon: FileText },
   { href: "/checkin", label: "Daily Check-in", icon: CalendarHeart },
+  { href: "/messages", label: "Care Team Chat", icon: MessagesSquare },
   { href: "/faq", label: "AI Coach FAQ", icon: MessageCircle },
   { href: "/find-doctors", label: "Find Doctors", icon: MapPin },
   { href: "/subscription", label: "Subscription", icon: CreditCard },

@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Download, ShieldAlert, Trash2 } from "lucide-react";
 import { getUser } from "../../lib/auth";
 
-type Tab = "Account" | "Notifications" | "Privacy & Data";
+type Tab = "Account" | "Notifications" | "AI & Diagnostics" | "Privacy & Data";
 
 const sampleExport = {
   sessions: [{ exercise_name: "Knee Flexion", achieved_angle: 82, rep_count: 10 }],
@@ -28,13 +28,43 @@ function Toggle({ on, setOn }: { on: boolean; setOn: (value: boolean) => void })
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Account");
   const [email, setEmail] = useState("arjun@example.com");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [keySaved, setKeySaved] = useState(false);
+  const [speechTesting, setSpeechTesting] = useState(false);
 
   useEffect(() => {
     const user = getUser();
     if (user?.email) {
       setEmail(user.email);
     }
+    const savedKey =
+      localStorage.getItem("recoverx_gemini_api_key") ||
+      localStorage.getItem("gemini_api_key") ||
+      "";
+    setGeminiKey(savedKey);
   }, []);
+
+  const handleSaveGeminiKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem("recoverx_gemini_api_key", geminiKey.trim());
+    localStorage.setItem("gemini_api_key", geminiKey.trim());
+    setKeySaved(true);
+    setTimeout(() => setKeySaved(false), 3000);
+  };
+
+  const handleTestSpeech = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      setSpeechTesting(true);
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance("Welcome to RecoverX. Your form is looking great. Keep bending smoothly.");
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      u.onend = () => setSpeechTesting(false);
+      u.onerror = () => setSpeechTesting(false);
+      window.speechSynthesis.speak(u);
+    }
+  };
+
   const [newPassword, setNewPassword] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteDataConfirm, setDeleteDataConfirm] = useState("");
@@ -57,7 +87,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "antigravity-data-export.json";
+    anchor.download = "recoverx-patient-data-export.json";
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -67,13 +97,13 @@ export default function SettingsPage() {
       <div className="space-grid" />
       <div className="relative z-10 mx-auto max-w-5xl pb-12">
         <header className="mb-6">
-          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">Page 12 / Settings</p>
+          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">System & Patient Preferences</p>
           <h1 className="mt-2 font-display text-3xl font-semibold text-[var(--text-1)] md:text-4xl">Settings</h1>
         </header>
 
         <div className="mb-6 flex flex-wrap gap-2">
-          {(["Account", "Notifications", "Privacy & Data"] as Tab[]).map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`rounded-full border px-5 py-2 text-sm ${activeTab === tab ? "border-[var(--primary)] bg-[var(--primary-dim)] text-[var(--primary)]" : "border-[var(--border)] text-[var(--text-3)]"}`}>
+          {(["Account", "Notifications", "AI & Diagnostics", "Privacy & Data"] as Tab[]).map((tab) => (
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`rounded-full border px-5 py-2 text-sm font-medium transition ${activeTab === tab ? "border-[var(--primary)] bg-[var(--primary-dim)] text-[var(--primary)] shadow-sm" : "border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-2)]"}`}>
               {tab}
             </button>
           ))}
@@ -128,6 +158,113 @@ export default function SettingsPage() {
               <NotifyRow label="Progress milestones" on={progressMilestones} setOn={setProgressMilestones} />
               <NotifyRow label="Pain alerts" on={painAlerts} setOn={setPainAlerts} />
               <NotifyRow label="Weekly summaries" on={weeklySummaries} setOn={setWeeklySummaries} />
+            </div>
+          </section>
+        )}
+
+        {activeTab === "AI & Diagnostics" && (
+          <section className="grid gap-6 lg:grid-cols-2">
+            <div className="card p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✨</span>
+                <h2 className="font-display text-xl font-semibold text-[var(--text-1)]">
+                  Google Gemini Intelligence API Key
+                </h2>
+              </div>
+              <p className="text-xs text-[var(--text-3)] leading-relaxed">
+                RecoverX comes with a built-in fallback clinical engine that works 100% offline. If you want live, unbounded generative queries for reports and check-ins, provide your Google Gemini API key below.
+              </p>
+
+              <form onSubmit={handleSaveGeminiKey} className="space-y-3 pt-2">
+                <label className="block text-xs font-semibold text-[var(--text-2)]">Gemini API Key</label>
+                <input
+                  type="password"
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full rounded-[var(--r-sm)] border border-[var(--border)] bg-[var(--bg-input)] p-3 text-sm font-mono text-[var(--text-1)] outline-none focus:border-[var(--primary)] transition"
+                />
+                <div className="flex items-center gap-3 pt-1">
+                  <button type="submit" className="btn-primary px-5 py-2.5 text-xs font-semibold">
+                    Save Key
+                  </button>
+                  {geminiKey && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGeminiKey("");
+                        localStorage.removeItem("recoverx_gemini_api_key");
+                        localStorage.removeItem("gemini_api_key");
+                      }}
+                      className="px-4 py-2.5 text-xs font-medium text-[var(--danger)] hover:bg-[var(--danger-light)] rounded-[var(--r-sm)] transition"
+                    >
+                      Remove Key
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {keySaved && (
+                <div className="p-3 rounded-lg bg-[var(--accent-light)] text-[var(--accent-dark)] text-xs font-semibold border border-[var(--accent)]/30 animate-fadeIn">
+                  ✓ Custom Gemini API Key saved to local secure storage!
+                </div>
+              )}
+            </div>
+
+            <div className="card p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🎙️</span>
+                <h2 className="font-display text-xl font-semibold text-[var(--text-1)]">
+                  Audio & Computer Vision Diagnostics
+                </h2>
+              </div>
+              <p className="text-xs text-[var(--text-3)] leading-relaxed">
+                Verify that your browser&apos;s real-time Web Audio coach, WebGL skeleton processor, and camera stream are ready for exercise sessions.
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+                  <div>
+                    <div className="text-xs font-semibold text-[var(--text-1)]">Audio Coach Voice</div>
+                    <div className="text-[11px] text-[var(--text-3)]">
+                      {deviceStatus.speech ? "SpeechSynthesis Engine Ready" : "Speech Synthesis Unavailable"}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestSpeech}
+                    disabled={speechTesting || !deviceStatus.speech}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--primary)] text-white hover:opacity-90 transition disabled:opacity-50"
+                  >
+                    {speechTesting ? "Playing..." : "Test Voice Coach"}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+                  <div>
+                    <div className="text-xs font-semibold text-[var(--text-1)]">MediaPipe BlazePose Accel</div>
+                    <div className="text-[11px] text-[var(--text-3)]">
+                      {deviceStatus.webgl ? "WebGL Hardware Acceleration Active" : "Software Fallback"}
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-emerald-500">
+                    {deviceStatus.webgl ? "✓ Ready" : "Notice"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+                  <div>
+                    <div className="text-xs font-semibold text-[var(--text-1)]">Camera Stream Status</div>
+                    <div className="text-[11px] text-[var(--text-3)]">{deviceStatus.camera}</div>
+                  </div>
+                  <a
+                    href="/session/knee-flexion"
+                    className="text-xs font-semibold text-[var(--primary)] underline hover:opacity-80"
+                  >
+                    Test In Session
+                  </a>
+                </div>
+              </div>
             </div>
           </section>
         )}

@@ -301,10 +301,22 @@ export default function PatientDetailPage() {
                 <CartesianGrid strokeDasharray="4 2" stroke="#EDF2F7" vertical={false} />
                 <XAxis dataKey="date" tick={{ fill: "#7A94AD", fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 10]} tick={{ fill: "#7A94AD", fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} />
                 <Line type="monotone" dataKey="pain" stroke="var(--danger)" strokeWidth={2}
-                  dot={props => <circle cx={props.cx} cy={props.cy} r={4}
-                    fill={painColor(Number(props.payload.pain))} stroke="#fff" strokeWidth={2} />} />
+                  dot={(props: { cx?: number; cy?: number; payload?: { pain?: number } }) => {
+                    if (!props || !props.payload) return <circle key={`dot-${props?.cx ?? 0}`} cx={props?.cx ?? 0} cy={props?.cy ?? 0} r={0} />;
+                    const val = Number(props.payload.pain ?? 0);
+                    return (
+                      <circle
+                        key={`pain-dot-${props.cx}-${props.cy}`}
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={4}
+                        fill={painColor(val)}
+                        stroke="#fff"
+                        strokeWidth={2}
+                      />
+                    );
+                  }} />
               </LineChart>
             </ResponsiveContainer>
           </div>

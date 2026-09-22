@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Send } from "lucide-react";
+import { getGeminiApiKey } from "../../lib/supabase";
 
 type Message = {
   role: "user" | "ai";
@@ -20,7 +21,17 @@ const QUICK_QUESTIONS = [
   "Is it normal to feel tired after sessions?",
 ];
 
-const extractedData = {
+interface ExtractedReportData {
+  surgeryType: string;
+  surgeryDate?: string;
+  operatedSide?: string;
+  prescribedExercises?: Array<{ name: string }>;
+  restrictions?: string[];
+  redFlags?: string[];
+  allowedROM?: { min: number; max: number };
+}
+
+const defaultExtractedData: ExtractedReportData = {
   surgeryType: "Total Knee Replacement",
   surgeryDate: "2026-05-01",
   operatedSide: "RIGHT",
@@ -30,8 +41,6 @@ const extractedData = {
   allowedROM: { min: 0, max: 90 },
 };
 
-const reportUploaded = true;
-
 function formatTime(ms: number) {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(ms));
 }
@@ -39,7 +48,7 @@ function formatTime(ms: number) {
 function TypingIndicator() {
   return (
     <div className="msg-ai flex justify-start gap-3">
-      <div className="ai-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-dim)] font-display font-bold text-[var(--primary)]">G</div>
+      <div className="ai-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-dim)] font-display font-bold text-[var(--primary)]">Rx</div>
       <div className="bubble rounded-[var(--r-lg)] rounded-bl bg-[var(--glass-bg)] px-4 py-3 text-[var(--text-2)]">
         <span className="inline-flex gap-1">
           <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--primary)]" />
@@ -64,13 +73,24 @@ export default function FAQPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "ai",
-      text: "Ask me about your recovery plan, exercises, pain, swelling, or what your report says.",
+      text: "Hello! I'm your RecoverX recovery assistant. Ask me anything about your rehabilitation protocol, daily exercises, pain, swelling, or clinical restrictions.",
       time: Date.now(),
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [activeReport, setActiveReport] = useState<ExtractedReportData>(defaultExtractedData);
   const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("recoverx-active-report") || localStorage.getItem("antigravity-active-report");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.surgeryType) setActiveReport(parsed);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
@@ -84,24 +104,23 @@ export default function FAQPage() {
     setIsLoading(true);
     setInput("");
 
-    const reportContext = extractedData
-      ? `Patient details from their uploaded report:
-       Surgery: ${extractedData.surgeryType} on ${extractedData.surgeryDate}
-       Side: ${extractedData.operatedSide}
-       Prescribed exercises: ${extractedData.prescribedExercises?.map((e) => e.name).join(", ")}
-       Restrictions: ${extractedData.restrictions?.join("; ")}
-       Red flags: ${extractedData.redFlags?.join("; ")}
-       Allowed ROM: ${extractedData.allowedROM?.min}°–${extractedData.allowedROM?.max}°`
-      : "No medical report uploaded. Answer based on general AAOS 2022 post-surgery guidelines.";
+    const data = activeReport || defaultExtractedData;
+    const reportContext = `Patient details from their uploaded medical report:
+       Surgery: ${data.surgeryType} on ${data.surgeryDate || "recent post-op"}
+       Side: ${data.operatedSide || "Affected side"}
+       Prescribed exercises: ${data.prescribedExercises?.map((e: { name: string }) => e.name).join(", ")}
+       Restrictions: ${data.restrictions?.join("; ")}
+       Red flags: ${data.redFlags?.join("; ")}
+       Allowed ROM: ${data.allowedROM?.min || 0}°–${data.allowedROM?.max || 90}°`;
 
     let text = fallbackAnswer(trimmed);
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = getGeminiApiKey();
 
     if (apiKey) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const prompt = `You are AntiGravity's AI recovery assistant. ${reportContext}
+        const prompt = `You are RecoverX's AI recovery assistant. ${reportContext}
 Answer this patient's question: "${trimmed}"
 
 Rules: Under 80 words. Warm, clear, reassuring. Reference their specific report if available.
@@ -128,7 +147,7 @@ Do NOT add a disclaimer at the end (it will be added automatically).`;
       <div className="space-grid" />
       <div className="relative z-10 mx-auto max-w-5xl pb-12">
         <header className="mb-6">
-          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">Page 9 / AI Coach FAQ</p>
+          <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">AI Guidance · Personalized Recovery Assistant</p>
           <h1 className="mt-2 font-display text-3xl font-semibold text-[var(--text-1)] md:text-4xl">AI Coach FAQ</h1>
         </header>
 
@@ -152,7 +171,7 @@ Do NOT add a disclaimer at the end (it will be added automatically).`;
             {messages.map((msg, index) => (
               <div key={`${msg.time}-${index}`} className={`${msg.role === "user" ? "msg-user justify-end" : "msg-ai justify-start gap-3"} flex`}>
                 {msg.role === "ai" && (
-                  <div className="ai-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-dim)] font-display font-bold text-[var(--primary)]">G</div>
+                  <div className="ai-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-dim)] font-display font-bold text-[var(--primary)]">Rx</div>
                 )}
                 <div
                   className={`bubble max-w-[78%] px-4 py-3 text-sm leading-6 ${
@@ -161,7 +180,7 @@ Do NOT add a disclaimer at the end (it will be added automatically).`;
                       : "rounded-[var(--r-lg)] rounded-bl bg-[var(--glass-bg)] text-[var(--text-1)] border border-[var(--glass-border)]"
                   }`}
                 >
-                  {msg.role === "ai" && reportUploaded && <div className="badge badge-green mb-2 text-[10px]">Based on your report ✓</div>}
+                  {msg.role === "ai" && Boolean(activeReport?.surgeryType) && <div className="badge badge-green mb-2 text-[10px]">Based on your report ✓</div>}
                   <p>{msg.text}</p>
                   {msg.role === "ai" && (
                     <p className="mt-2 border-t border-[var(--border)] pt-2 text-[11px] text-[var(--text-3)]">

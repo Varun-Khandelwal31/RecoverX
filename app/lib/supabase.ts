@@ -111,3 +111,70 @@ export function fmtDateShort(iso: string) {
   if (diffDays < 7)  return `${diffDays}d ago`;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+export function getGeminiApiKey(): string {
+  if (typeof window !== "undefined") {
+    const customKey = localStorage.getItem("recoverx_gemini_api_key");
+    if (customKey && customKey.trim()) return customKey.trim();
+  }
+  return process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+}
+
+export function getLocalSessions(): DbSession[] {
+  if (typeof window === "undefined") return [];
+  const sessions: DbSession[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        (key.startsWith("recoverx-session-") || key.startsWith("antigravity-session-")) &&
+        !key.endsWith("-completed")
+      ) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+              sessions.push({
+                id: parsed.id || Number(key.replace(/\D/g, "")) || Date.now(),
+                user_id: parsed.user_id || DEMO_USER,
+                exercise_name: parsed.exercise_name || "Exercise",
+                exercise_key: parsed.exercise_key || "knee-flexion",
+                achieved_angle: parsed.achieved_angle || 0,
+                target_angle: parsed.target_angle || 90,
+                rep_count: parsed.rep_count || 0,
+                correct_reps: parsed.correct_reps || 0,
+                pain_before: parsed.pain_before ?? 2,
+                pain_after: parsed.pain_after ?? 2,
+                duration_seconds: parsed.duration_seconds || 0,
+                status: parsed.status || "COMPLETED",
+                week_number: parsed.week_number || 3,
+                angle_log: parsed.angle_log || [],
+                feedback_log: parsed.feedback_log || [],
+                started_at: parsed.started_at || parsed.ended_at || new Date().toISOString(),
+                ended_at: parsed.ended_at || new Date().toISOString(),
+              });
+            }
+          } catch {
+            // Ignore malformed individual session item
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Error reading local sessions:", err);
+  }
+  return sessions.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+}
+
+export function saveLocalSession(session: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+  const key = `recoverx-session-${Date.now()}`;
+  localStorage.setItem(key, JSON.stringify(session));
+  localStorage.setItem(`antigravity-session-${Date.now()}`, JSON.stringify(session));
+  localStorage.setItem("recoverx-session-completed", String(Date.now()));
+  localStorage.setItem("antigravity-session-completed", String(Date.now()));
+  window.dispatchEvent(new CustomEvent("session-completed"));
+}
+

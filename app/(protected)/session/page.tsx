@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Clock3, Lock, PlayCircle, ShieldAlert, Upload } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock3, Lock, PlayCircle, ShieldAlert, Upload } from "lucide-react";
 
 type ExercisePose = "knee-flexion" | "straight-leg-raise" | "heel-slides" | "quad-sets" | "terminal-knee-extension";
 type Difficulty = "Easy" | "Moderate" | "Hard";
@@ -14,8 +15,6 @@ type Exercise = {
   difficulty: Difficulty;
   inProgress?: boolean;
 };
-
-const hasUploadedReport = false;
 
 const personalizedExercises: Exercise[] = [
   { id: "knee-flexion", name: "Knee Flexion", pose: "knee-flexion", targetAngle: 90, difficulty: "Moderate", inProgress: true },
@@ -179,6 +178,15 @@ function ExerciseCard({ exercise, locked = false }: { exercise: Exercise; locked
 }
 
 export default function ExerciseSelectionPage() {
+  const [hasReport, setHasReport] = useState(false);
+
+  useEffect(() => {
+    const r = localStorage.getItem("recoverx-active-report") || localStorage.getItem("antigravity-active-report");
+    if (r) {
+      setHasReport(true);
+    }
+  }, []);
+
   return (
     <main className="relative min-h-screen overflow-hidden px-5 py-8 md:px-8">
       <div className="space-grid" />
@@ -186,28 +194,33 @@ export default function ExerciseSelectionPage() {
       <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-8 pb-12">
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">Page 5 / Exercise Selection</p>
+            <p className="font-data text-xs uppercase tracking-[0.22em] text-[var(--primary)]">Clinical Protocol · Daily Rehabilitation</p>
             <h1 className="mt-2 font-display text-3xl font-semibold text-[var(--text-1)] md:text-4xl">Choose today&apos;s session</h1>
           </div>
-          {!hasUploadedReport && (
+          {hasReport ? (
+            <span className="badge badge-green w-fit">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Prescribed Protocol Active
+            </span>
+          ) : (
             <span className="badge badge-amber w-fit">
               <ShieldAlert className="h-3.5 w-3.5" />
-              Report needed for personalization
+              Report recommended for tailored angles
             </span>
           )}
         </header>
 
         <section className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {personalizedExercises.map((exercise) => (
-            <ExerciseCard key={exercise.id} exercise={exercise} locked={!hasUploadedReport} />
+            <ExerciseCard key={exercise.id} exercise={exercise} locked={false} />
           ))}
         </section>
 
-        {!hasUploadedReport && (
+        {!hasReport && (
           <section className="flex flex-col gap-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2 className="font-display text-2xl font-semibold text-[var(--text-1)]">Standard Post-Surgery Exercises (AAOS defaults)</h2>
-              <span className="badge badge-amber w-fit">⚠️ Upload your report for personalized angles</span>
+              <span className="badge badge-blue w-fit">AAOS 2022 Clinical Guidelines</span>
             </div>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">

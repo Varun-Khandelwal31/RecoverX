@@ -2,11 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
-import { ArrowLeft, CameraOff, ShieldAlert, Volume2, X } from "lucide-react";
+import { ArrowLeft, CameraOff, ShieldAlert, Volume2, X, Sparkles, CheckCircle2 } from "lucide-react";
+
+const JointVisualizer3D = dynamic(() => import("../../../components/JointVisualizer3D"), { ssr: false });
 import { createNotification } from "../../../components/NotificationBell";
+import { getUser } from "../../../lib/auth";
+import { saveLocalSession, getGeminiApiKey } from "../../../lib/supabase";
 import {
   EmaSmoother,
   RepCounter,
@@ -170,6 +175,9 @@ export default function LiveSessionPage() {
   const [showMobileWarning, setShowMobileWarning] = useState(false);
   const [sessionCleared, setSessionCleared] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [show3dTwin, setShow3dTwin] = useState(true);
+  const [repHistory, setRepHistory] = useState<{ rep: number; angle: number; correct: boolean }[]>([]);
   const feedbackLogRef = useRef<HTMLDivElement>(null);
 
   const angleDeviation = Math.abs(config.targetAngle - currentAngle);
@@ -231,7 +239,7 @@ export default function LiveSessionPage() {
         : "Ease back toward your target.";
 
     let text = fallbackText;
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = getGeminiApiKey();
 
     if (apiKey) {
       const genAI = new GoogleGenerativeAI(apiKey);
@@ -530,6 +538,129 @@ export default function LiveSessionPage() {
     };
   }, [sessionCleared, showRedFlagWarning, startCamera]);
 
+  // Virtual Patient Simulation Mode
+  useEffect(() => {
+    if (!isSimulating) return;
+    setCameraState("ready");
+    setPoseState("ready");
+    setPoseDetected(true);
+
+    let simTime = 0;
+    let localReps = repCount;
+    let localCorrect = correctReps;
+
+    const interval = setInterval(() => {
+      simTime += 0.08;
+      const cycle = (Math.sin(simTime) + 1) / 2;
+      const simAngle = Math.round(18 + cycle * (config.targetAngle - 10));
+
+      setCurrentAngle(simAngle);
+      currentAngleRef.current = simAngle;
+      if (simAngle > bestAngleRef.current) {
+        bestAngleRef.current = simAngle;
+        setBestAngle(simAngle);
+      }
+
+      angleLogRef.current.push({ t: Date.now() - sessionStartRef.current, a: simAngle });
+
+      // Count peak repetition
+      if (Math.sin(simTime) > 0.96 && Math.sin(simTime - 0.08) <= 0.96) {
+        localReps += 1;
+        const isGood = Math.abs(simAngle - config.targetAngle) <= 12;
+        if (isGood) localCorrect += 1;
+        setRepCount(localReps);
+        setCorrectReps(localCorrect);
+        setRepHistory((prev) => [...prev, { rep: localReps, angle: simAngle, correct: isGood }]);
+        triggerFeedback(simAngle);
+      }
+
+      // Draw virtual stick figure skeleton on canvas
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          const w = canvas.width || 640;
+          const h = canvas.height || 480;
+          ctx.fillStyle = "#09121f";
+          ctx.fillRect(0, 0, w, h);
+
+          // Subtle coordinate grid
+          ctx.strokeStyle = "rgba(255,255,255,0.06)";
+          ctx.lineWidth = 1;
+          for (let x = 0; x < w; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+          }
+          for (let y = 0; y < h; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+          }
+
+          // Stick figure kinematics
+          const hipX = w * 0.44;
+          const hipY = h * 0.48;
+          const kneeX = hipX + 90;
+          const kneeY = hipY + 90;
+          const rad = (simAngle * Math.PI) / 180;
+          const ankleX = kneeX - 90 * Math.sin(rad * 0.85);
+          const ankleY = kneeY + 90 * Math.cos(rad * 0.85);
+
+          // Draw torso
+          ctx.strokeStyle = "#38bdf8";
+          ctx.lineWidth = 5;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(hipX - 15, hipY - 120);
+          ctx.lineTo(hipX, hipY);
+          ctx.stroke();
+
+          // Thigh
+          ctx.strokeStyle = "#0ea5e9";
+          ctx.beginPath();
+          ctx.moveTo(hipX, hipY);
+          ctx.lineTo(kneeX, kneeY);
+          ctx.stroke();
+
+          // Shin with dynamic flexion color
+          ctx.strokeStyle = Math.abs(simAngle - config.targetAngle) < 10 ? "#10b981" : "#0ea5e9";
+          ctx.beginPath();
+          ctx.moveTo(kneeX, kneeY);
+          ctx.lineTo(ankleX, ankleY);
+          ctx.stroke();
+
+          // Nodes
+          [[hipX, hipY], [kneeX, kneeY], [ankleX, ankleY], [hipX - 15, hipY - 120]].forEach(([px, py]) => {
+            ctx.fillStyle = "#38bdf8";
+            ctx.beginPath();
+            ctx.arc(px, py, 7, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          });
+
+          // Head
+          ctx.beginPath();
+          ctx.arc(hipX - 20, hipY - 150, 22, 0, 2 * Math.PI);
+          ctx.fillStyle = "#e2e8f0";
+          ctx.fill();
+
+          // Angle arc
+          ctx.strokeStyle = "#38bdf8";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(kneeX, kneeY, 34, Math.PI / 2, Math.PI / 2 + rad, false);
+          ctx.stroke();
+
+          // Angle text
+          ctx.fillStyle = "#38bdf8";
+          ctx.font = "bold 18px monospace";
+          ctx.fillText(`${simAngle}°`, kneeX + 42, kneeY + 8);
+        }
+      }
+    }, 70);
+
+    return () => clearInterval(interval);
+  }, [isSimulating, config.targetAngle, repCount, correctReps, triggerFeedback]);
+
   const endSession = () => {
     setPainAfter(sessionPain);
     setShowEndModal(true);
@@ -542,8 +673,11 @@ export default function LiveSessionPage() {
       ? Math.round(angleLog.reduce((sum, entry) => sum + entry.a, 0) / angleLog.length)
       : currentAngle;
 
+    const user = getUser();
+    const userId = user?.id || "demo-user";
+
     const payload = {
-      user_id: "demo-user",
+      user_id: userId,
       exercise_name: config.name,
       exercise_key: exerciseId,
       target_angle: config.targetAngle,
@@ -556,40 +690,34 @@ export default function LiveSessionPage() {
       duration_seconds: Math.round(elapsed / 1000),
       angle_log: angleLog,
       feedback_log: feedbackMessagesRef.current,
-      status: "COMPLETED",
+      status: "COMPLETED" as const,
       week_number: config.recoveryWeek,
       ended_at: new Date().toISOString(),
     };
+
+    saveLocalSession(payload);
 
     try {
       const supabase = await getBrowserSupabase();
       if (supabase) {
         await supabase.from("exercise_sessions").insert(payload);
         await supabase.from("notifications").insert({
-          user_id: "demo-user",
+          user_id: userId,
           type: "SESSION_REMINDER",
           title: "✅ Session complete",
           message: `${config.name}: ${bestAngle}° achieved · ${correctReps}/${repCount} correct reps`,
         });
-      } else {
-        window.localStorage.setItem(`antigravity-session-${Date.now()}`, JSON.stringify(payload));
       }
-      createNotification(
-        bestAngle >= config.targetAngle ? "GREAT_PROGRESS" : "SESSION_REMINDER",
-        bestAngle >= config.targetAngle ? "🏆 New personal best!" : "✅ Session complete",
-        `${config.name}: ${bestAngle}° achieved · ${correctReps}/${repCount} correct reps`,
-        "/activity"
-      );
-      // Signal dashboard to refetch session count
-      window.localStorage.setItem("antigravity-session-completed", String(Date.now()));
-      window.dispatchEvent(new CustomEvent("session-completed"));
     } catch (error) {
-      console.warn("Session saved locally because Supabase insert failed:", error);
-      window.localStorage.setItem(`antigravity-session-${Date.now()}`, JSON.stringify(payload));
-      createNotification("SESSION_REMINDER", "✅ Session complete", `${config.name}: ${bestAngle}° achieved`, "/activity");
-      window.localStorage.setItem("antigravity-session-completed", String(Date.now()));
-      window.dispatchEvent(new CustomEvent("session-completed"));
+      console.warn("Supabase insert skipped, saved locally:", error);
     }
+
+    createNotification(
+      bestAngle >= config.targetAngle ? "GREAT_PROGRESS" : "SESSION_REMINDER",
+      bestAngle >= config.targetAngle ? "🏆 New personal best!" : "✅ Session complete",
+      `${config.name}: ${bestAngle}° achieved · ${correctReps}/${repCount} correct reps`,
+      "/activity"
+    );
 
     setIsSaving(false);
     router.refresh();
@@ -598,7 +726,7 @@ export default function LiveSessionPage() {
 
   const discardSession = () => router.push("/session");
 
-  const headerTitle = useMemo(() => `AntiGravity Session — ${config.name}`, [config.name]);
+  const headerTitle = useMemo(() => `RecoverX Session — ${config.name}`, [config.name]);
 
   return (
     <div className="min-h-screen overflow-hidden text-[var(--text-2)]" style={{ background: "var(--bg-page)" }}>
@@ -610,6 +738,30 @@ export default function LiveSessionPage() {
           </Link>
           <div className="min-w-0 flex-1 font-display text-lg font-semibold text-[var(--text-1)] md:text-xl">{headerTitle}</div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShow3dTwin(!show3dTwin)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                show3dTwin
+                  ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
+                  : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+              }`}
+              title="Toggle Live 3D Joint Biomechanics Twin"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+              <span>{show3dTwin ? "3D Twin Active" : "3D Twin"}</span>
+            </button>
+            <button
+              onClick={() => setIsSimulating(!isSimulating)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                isSimulating
+                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                  : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+              }`}
+              title="Toggle Virtual Movement Simulation without camera"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              {isSimulating ? "Simulating Active" : "Virtual Demo"}
+            </button>
             <div className="flex items-center gap-2 font-display text-xs font-semibold tracking-wider text-[var(--danger)]">
               <span className="h-2 w-2 rounded-full bg-[var(--danger)] animate-pulse-glow" />
               LIVE
@@ -629,14 +781,22 @@ export default function LiveSessionPage() {
           >
             <video ref={videoRef} playsInline muted autoPlay className="hidden" />
 
-            {cameraState === "denied" || cameraState === "error" ? (
+            {!isSimulating && (cameraState === "denied" || cameraState === "error") ? (
               <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-deep)] p-6">
                 <div className="error-card max-w-md text-center">
                   <CameraOff className="mx-auto mb-4 h-12 w-12 text-[var(--danger)]" />
                   <h3 className="font-display text-2xl font-semibold text-[var(--text-1)]">Camera Access Needed</h3>
-                  <p className="mt-3 font-body text-sm text-[var(--text-2)]">AntiGravity needs your camera to track your exercise form.</p>
-                  <p className="mt-2 font-body text-sm text-[var(--text-3)]">Click the camera icon in your browser address bar → Allow</p>
-                  <button onClick={() => window.location.reload()} className="btn-primary mt-6 px-6 py-3 text-sm">Try Again</button>
+                  <p className="mt-3 font-body text-sm text-[var(--text-2)]">RecoverX needs your camera to track your exercise form.</p>
+                  <p className="mt-2 font-body text-sm text-[var(--text-3)]">Click the camera icon in your browser address bar → Allow, or launch the interactive simulator below.</p>
+                  <div className="mt-6 flex flex-col gap-2">
+                    <button
+                      onClick={() => setIsSimulating(true)}
+                      className="btn-primary px-6 py-3 text-sm inline-flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" /> Launch Virtual Patient Simulator
+                    </button>
+                    <button onClick={() => window.location.reload()} className="btn-ghost px-6 py-2 text-xs">Try Camera Again</button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -716,6 +876,28 @@ export default function LiveSessionPage() {
               <div className="font-data text-[44px]" style={{ color: "var(--primary)", fontWeight: 500 }}>{formatTime(elapsed)}</div>
               <div className="text-xs text-[var(--text-3)]">Session time</div>
             </div>
+
+            {show3dTwin && (
+              <div className="mb-4 rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-2 shadow-md">
+                <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs">
+                  <div className="flex items-center gap-1.5 font-semibold text-sky-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>3D Kinematic Twin</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-300">
+                    Live: {currentAngle}° / {config.targetAngle}°
+                  </span>
+                </div>
+                <JointVisualizer3D
+                  angle={currentAngle}
+                  targetAngle={config.targetAngle}
+                  height={170}
+                  interactive={true}
+                  showLabels={false}
+                  showBadges={false}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-[140px_1fr]">
               <div>
@@ -839,7 +1021,7 @@ export default function LiveSessionPage() {
               fontSize: 36, margin: "0 auto 16px",
             }}>💻</div>
             <h2 className="font-display text-2xl font-semibold text-[var(--text-1)]">Laptop recommended</h2>
-            <p className="mt-3 text-sm leading-6 text-[var(--text-2)]">For the best experience, please use AntiGravity on a laptop. Your webcam needs to see your full body.</p>
+            <p className="mt-3 text-sm leading-6 text-[var(--text-2)]">For the best experience, please use RecoverX on a laptop. Your webcam needs to see your full body.</p>
             <button onClick={() => { setShowMobileWarning(false); setSessionCleared(true); }} className="btn-primary mt-6 w-full px-6 py-3 text-sm">Continue anyway</button>
           </div>
         </div>
@@ -879,7 +1061,7 @@ export default function LiveSessionPage() {
 
       {showEndModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[rgba(15,23,42,0.6)] p-4 backdrop-blur-md">
-          <div className="card w-full max-w-xl p-8 text-center">
+          <div className="card w-full max-w-xl p-8 text-center max-h-[90vh] overflow-y-auto">
             <div className="mb-4 text-5xl">🎉</div>
             <h2 className="font-display text-3xl font-semibold text-[var(--text-1)]">Session Complete!</h2>
 
@@ -888,6 +1070,37 @@ export default function LiveSessionPage() {
               <StatMini label="Best Angle" value={`${bestAngle}°`} />
               <StatMini label="Total Reps" value={repCount} />
               <StatMini label="Correct" value={`${correctReps} / ${repCount}`} />
+            </div>
+
+            {/* AI Form Scorecard */}
+            <div className="mb-4 rounded-xl border border-slate-700/60 bg-slate-900/60 p-4 text-left">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="font-display font-bold text-sm text-slate-200">AI Form Scorecard</span>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  formScore >= 75 ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                }`}>
+                  {formScore}% Clean Form
+                </span>
+              </div>
+
+              {repHistory.length > 0 ? (
+                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  {repHistory.map((r) => (
+                    <div key={r.rep} className="flex items-center justify-between text-xs py-1.5 px-3 rounded bg-slate-800/80 border border-slate-700/50">
+                      <span className="text-slate-400 font-mono font-medium">Rep #{r.rep}</span>
+                      <span className="font-mono font-semibold text-sky-400">{r.angle}° / {config.targetAngle}°</span>
+                      <span className={r.correct ? "text-emerald-400 font-medium flex items-center gap-1" : "text-amber-400 font-medium flex items-center gap-1"}>
+                        {r.correct ? "✓ Target reached" : "↑ Ease deeper"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400">Steady tempo maintained throughout workout.</div>
+              )}
             </div>
 
             {/* Feature 4: Pain Predictor */}
