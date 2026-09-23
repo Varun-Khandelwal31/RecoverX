@@ -10,6 +10,7 @@ interface JointVisualizer3DProps {
   height?: number;
   showLabels?: boolean;
   showBadges?: boolean;
+  theme?: "light" | "dark";
 }
 
 export default function JointVisualizer3D({
@@ -19,6 +20,7 @@ export default function JointVisualizer3D({
   height = 360,
   showLabels = true,
   showBadges = true,
+  theme = "light",
 }: JointVisualizer3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [internalAngle, setInternalAngle] = useState(angle);
@@ -40,8 +42,9 @@ export default function JointVisualizer3D({
     if (!container) return;
 
     // 1. Scene setup
+    const isLight = theme === "light";
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0A1424");
+    scene.background = new THREE.Color(isLight ? "#F1F6FB" : "#0A1424");
 
     const width = container.clientWidth || 400;
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
@@ -55,34 +58,34 @@ export default function JointVisualizer3D({
     container.appendChild(renderer.domElement);
 
     // 2. Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+    const ambientLight = new THREE.AmbientLight(0xffffff, isLight ? 0.9 : 0.75);
     scene.add(ambientLight);
 
-    const keyLight = new THREE.DirectionalLight(0x0ea5e9, 1.8);
+    const keyLight = new THREE.DirectionalLight(0x0ea5e9, isLight ? 1.5 : 1.8);
     keyLight.position.set(4, 6, 4);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x10b981, 1.2);
+    const fillLight = new THREE.DirectionalLight(0x10b981, isLight ? 1.0 : 1.2);
     fillLight.position.set(-4, 3, -3);
     scene.add(fillLight);
 
-    const rimLight = new THREE.PointLight(0x38bdf8, 1.5, 10);
+    const rimLight = new THREE.PointLight(0x38bdf8, isLight ? 1.2 : 1.5, 10);
     rimLight.position.set(0, -2, 3);
     scene.add(rimLight);
 
     // 3. Materials
     const boneMaterial = new THREE.MeshStandardMaterial({
-      color: 0xebf2f8,
+      color: isLight ? 0xc8d7e6 : 0xebf2f8,
       roughness: 0.35,
       metalness: 0.15,
     });
 
     const jointCartilageMaterial = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
+      color: 0x0ea5e9,
       roughness: 0.2,
       metalness: 0.4,
       emissive: 0x0284c7,
-      emissiveIntensity: 0.3,
+      emissiveIntensity: isLight ? 0.25 : 0.3,
     });
 
     const ligamentMaterial = new THREE.MeshStandardMaterial({
@@ -90,7 +93,7 @@ export default function JointVisualizer3D({
       roughness: 0.3,
       metalness: 0.2,
       emissive: 0x059669,
-      emissiveIntensity: 0.4,
+      emissiveIntensity: isLight ? 0.35 : 0.4,
     });
 
     const patellaMaterial = new THREE.MeshStandardMaterial({
@@ -194,7 +197,12 @@ export default function JointVisualizer3D({
     kneePivot.add(arcMesh);
 
     // Floor grid
-    const grid = new THREE.GridHelper(8, 16, 0x1e293b, 0x0f172a);
+    const grid = new THREE.GridHelper(
+      8,
+      16,
+      isLight ? 0xbed2e6 : 0x1e293b,
+      isLight ? 0xdce8f2 : 0x0f172a
+    );
     grid.position.y = -2.2;
     scene.add(grid);
 
@@ -282,10 +290,18 @@ export default function JointVisualizer3D({
       renderer.dispose();
       scene.clear();
     };
-  }, [height, isRotating]);
+  }, [height, isRotating, theme]);
+
+  const isLight = theme === "light";
 
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-slate-700/60 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 shadow-2xl">
+    <div
+      className={`relative rounded-2xl overflow-hidden border shadow-lg ${
+        isLight
+          ? "border-slate-200 bg-white"
+          : "border-slate-700/60 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 shadow-2xl"
+      }`}
+    >
       {/* 3D Canvas container */}
       <div
         ref={containerRef}
@@ -297,11 +313,21 @@ export default function JointVisualizer3D({
       {showBadges && (
         <>
           <div className="absolute top-4 left-4 flex flex-col gap-1.5 pointer-events-none">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/80 border border-sky-500/30 backdrop-blur-md text-xs font-semibold text-sky-400">
-              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+            <div
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border backdrop-blur-md text-xs font-semibold ${
+                isLight
+                  ? "bg-white/90 border-sky-500/20 text-sky-700 shadow-sm"
+                  : "bg-slate-900/80 border-sky-500/30 text-sky-400"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
               Interactive 3D Biomechanics
             </div>
-            <div className="text-[11px] text-slate-400 pl-1">
+            <div
+              className={`text-[11px] pl-1 font-medium ${
+                isLight ? "text-slate-500" : "text-slate-400"
+              }`}
+            >
               Drag to orbit · Real-time joint kinetics
             </div>
           </div>
@@ -310,7 +336,11 @@ export default function JointVisualizer3D({
             <button
               type="button"
               onClick={() => setIsRotating(!isRotating)}
-              className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700 backdrop-blur-md transition-all"
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border backdrop-blur-md transition-all ${
+                isLight
+                  ? "bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-sm"
+                  : "bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-700"
+              }`}
             >
               {isRotating ? "⏸ Pause Rotation" : "▶ Rotate"}
             </button>
@@ -320,22 +350,46 @@ export default function JointVisualizer3D({
 
       {/* Angle Readout & Interactive Controller */}
       {showLabels && (
-        <div className="p-4 border-t border-slate-800 bg-slate-950/80 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div
+          className={`p-4 border-t backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-4 ${
+            isLight
+              ? "border-slate-200 bg-white/95 text-slate-800"
+              : "border-slate-800 bg-slate-950/80 text-white"
+          }`}
+        >
           <div className="flex items-center gap-4">
             <div>
-              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+              <span
+                className={`text-[11px] uppercase tracking-wider font-bold block ${
+                  isLight ? "text-slate-400" : "text-slate-400"
+                }`}
+              >
                 Joint Flexion
               </span>
-              <span className="text-2xl font-bold font-mono text-sky-400">
+              <span
+                className={`text-2xl font-bold font-mono ${
+                  isLight ? "text-sky-600" : "text-sky-400"
+                }`}
+              >
                 {Math.round(displayAngle)}°
               </span>
             </div>
-            <div className="h-8 w-px bg-slate-800" />
+            <div
+              className={`h-8 w-px ${isLight ? "bg-slate-200" : "bg-slate-800"}`}
+            />
             <div>
-              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+              <span
+                className={`text-[11px] uppercase tracking-wider font-bold block ${
+                  isLight ? "text-slate-400" : "text-slate-400"
+                }`}
+              >
                 Target Angle
               </span>
-              <span className="text-lg font-semibold font-mono text-emerald-400">
+              <span
+                className={`text-lg font-semibold font-mono ${
+                  isLight ? "text-emerald-600" : "text-emerald-400"
+                }`}
+              >
                 {targetAngle}°
               </span>
             </div>
@@ -343,16 +397,30 @@ export default function JointVisualizer3D({
 
           {interactive && (
             <div className="flex-1 max-w-xs w-full flex items-center gap-3">
-              <span className="text-xs text-slate-400 font-mono">0°</span>
+              <span
+                className={`text-xs font-mono font-medium ${
+                  isLight ? "text-slate-400" : "text-slate-400"
+                }`}
+              >
+                0°
+              </span>
               <input
                 type="range"
                 min="0"
                 max="135"
                 value={internalAngle}
                 onChange={(e) => setInternalAngle(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
+                className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer ${
+                  isLight ? "bg-slate-200 accent-sky-600" : "bg-slate-800 accent-sky-400"
+                }`}
               />
-              <span className="text-xs text-slate-400 font-mono">135°</span>
+              <span
+                className={`text-xs font-mono font-medium ${
+                  isLight ? "text-slate-400" : "text-slate-400"
+                }`}
+              >
+                135°
+              </span>
             </div>
           )}
         </div>
