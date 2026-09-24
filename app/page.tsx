@@ -14,7 +14,12 @@ import {
   Layers,
   Award,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  useScroll,
+  useSpring,
+} from "framer-motion";
 
 const HeroScene = dynamic(() => import("./components/HeroScene"), {
   ssr: false,
@@ -23,11 +28,11 @@ const HeroScene = dynamic(() => import("./components/HeroScene"), {
       style={{
         height: 520,
         borderRadius: 24,
-        background: "#08111e",
+        background: "#F4F8FC",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        color: "#38bdf8",
+        color: "var(--primary)",
         fontSize: 14,
         fontWeight: 600,
       }}
@@ -44,11 +49,11 @@ const JointVisualizer3D = dynamic(() => import("./components/JointVisualizer3D")
       style={{
         height: 440,
         borderRadius: 20,
-        background: "#08111e",
+        background: "#F4F8FC",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        color: "#38bdf8",
+        color: "var(--primary)",
         fontSize: 14,
         fontWeight: 600,
       }}
@@ -131,8 +136,8 @@ const TESTIMONIALS = [
 ];
 
 const PRESETS = [
-  { name: "Full Extension", angle: 10, label: "10° Passive", zone: "Safe Extension", color: "#38bdf8" },
-  { name: "Quad Set Hold", angle: 35, label: "35° Active", zone: "Early Phase", color: "#38bdf8" },
+  { name: "Full Extension", angle: 10, label: "10° Passive", zone: "Safe Extension", color: "#0ea5e9" },
+  { name: "Quad Set Hold", angle: 35, label: "35° Active", zone: "Early Phase", color: "#0ea5e9" },
   { name: "Week 1 Mobilize", angle: 60, label: "60° Target", zone: "Mobilization", color: "#10b981" },
   { name: "Week 4 Seated", angle: 90, label: "90° Standard", zone: "Clinical Target", color: "#10b981" },
   { name: "High Flexion", angle: 115, label: "115° Athletic", zone: "Advanced Load", color: "#f59e0b" },
@@ -143,6 +148,14 @@ export default function Home() {
   const [sandboxAngle, setSandboxAngle] = useState(85);
   const [sandboxTarget, setSandboxTarget] = useState(90);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+
+  // Smooth scroll progress for walkthrough experience
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001,
+  });
 
   const milestones = [
     {
@@ -224,7 +237,7 @@ export default function Home() {
             position: "sticky",
             top: 0,
             zIndex: 100,
-            background: "rgba(255,255,255,0.85)",
+            background: "rgba(255,255,255,0.90)",
             backdropFilter: "blur(20px)",
             borderBottom: "1px solid rgba(216,230,240,0.8)",
             boxShadow: "0 4px 20px rgba(0,40,80,0.04)",
@@ -366,11 +379,33 @@ export default function Home() {
           </div>
         </nav>
 
+        {/* ── WALKTHROUGH SCROLL PROGRESS BAR ── */}
+        <div
+          style={{
+            position: "sticky",
+            top: 70,
+            zIndex: 99,
+            width: "100%",
+            height: 3,
+            background: "rgba(216,230,240,0.45)",
+          }}
+        >
+          <motion.div
+            style={{
+              scaleX,
+              transformOrigin: "0%",
+              height: "100%",
+              background: "linear-gradient(90deg, var(--primary), var(--accent))",
+              boxShadow: "0 0 10px rgba(26,110,189,0.5)",
+            }}
+          />
+        </div>
+
         {/* ── 3D HERO SECTION ── */}
         <section
           style={{
             position: "relative",
-            minHeight: "calc(100vh - 70px)",
+            minHeight: "calc(100vh - 73px)",
             padding: "60px 48px 80px",
             display: "grid",
             gridTemplateColumns: "1.1fr 1fr",
@@ -381,7 +416,7 @@ export default function Home() {
               "radial-gradient(circle at 15% 25%, rgba(26,110,189,0.08) 0%, transparent 45%), radial-gradient(circle at 85% 65%, rgba(14,168,116,0.09) 0%, transparent 50%), linear-gradient(180deg, #F0F4F8 0%, #E9EFF6 100%)",
           }}
         >
-          {/* Subtle 3D Perspective Grid Background */}
+          {/* Subtle Perspective Grid */}
           <div
             style={{
               position: "absolute",
@@ -398,16 +433,24 @@ export default function Home() {
           />
 
           {/* LEFT: Hero Copy & Value Props */}
-          <div style={{ position: "relative", zIndex: 10 }}>
+          <motion.div
+            initial={{ opacity: 0, x: -35 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            style={{ position: "relative", zIndex: 10 }}
+          >
             {/* Status Pill */}
-            <div
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
                 padding: "6px 16px",
                 borderRadius: "var(--r-full)",
-                background: "rgba(255,255,255,0.9)",
+                background: "rgba(255,255,255,0.95)",
                 border: "1px solid rgba(26,110,189,0.25)",
                 boxShadow: "0 2px 10px rgba(26,110,189,0.10)",
                 fontSize: 12,
@@ -426,10 +469,13 @@ export default function Home() {
                 }}
               />
               <span>Next-Gen Orthopedic AI · AAOS 2022 Validated</span>
-            </div>
+            </motion.div>
 
             {/* Main Headline */}
-            <h1
+            <motion.h1
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
               style={{
                 fontFamily: "var(--font-display)",
                 fontSize: 56,
@@ -454,10 +500,13 @@ export default function Home() {
               </span>
               <br />
               Coached by AI.
-            </h1>
+            </motion.h1>
 
             {/* Body Description */}
-            <p
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.25 }}
               style={{
                 fontSize: 17,
                 color: "var(--text-2)",
@@ -471,10 +520,13 @@ export default function Home() {
               motion lab. Real-time sub-degree joint tracking, live spoken
               coaching, and surgeon-synced recovery protocols — with zero wearable
               sensors.
-            </p>
+            </motion.p>
 
             {/* CTA Button Group */}
-            <div
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.35 }}
               style={{
                 display: "flex",
                 gap: 16,
@@ -491,7 +543,7 @@ export default function Home() {
                   fontSize: 15,
                   fontWeight: 700,
                   borderRadius: "var(--r-full)",
-                  boxShadow: "0 8px 24px rgba(26,110,189,0.35)",
+                  boxShadow: "0 8px 24px rgba(26,110,189,0.30)",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
@@ -531,10 +583,13 @@ export default function Home() {
                 <Play size={15} style={{ fill: "var(--primary)", color: "var(--primary)" }} />
                 Test 3D Sandbox
               </a>
-            </div>
+            </motion.div>
 
-            {/* Micro Feature Metric Badges */}
-            <div
+            {/* Micro Feature Badges */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.45 }}
               style={{
                 display: "flex",
                 gap: 24,
@@ -603,11 +658,14 @@ export default function Home() {
                   Zero Wearables
                 </span>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
-          {/* RIGHT: High-Tech 3D Biomechanical Stage */}
-          <div
+          {/* RIGHT: High-Tech 3D Biomechanical Stage (Clean White Mode) */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.9, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
             style={{
               position: "relative",
               height: 540,
@@ -616,13 +674,13 @@ export default function Home() {
               justifyContent: "center",
             }}
           >
-            {/* Ambient Backlight Glow behind 3D Card */}
+            {/* Ambient Lighting */}
             <div
               style={{
                 position: "absolute",
                 inset: -20,
                 background:
-                  "radial-gradient(circle at 60% 45%, rgba(14,165,233,0.22) 0%, rgba(16,185,129,0.12) 50%, transparent 75%)",
+                  "radial-gradient(circle at 60% 45%, rgba(26,110,189,0.15) 0%, rgba(14,168,116,0.10) 50%, transparent 75%)",
                 filter: "blur(40px)",
                 zIndex: 1,
                 pointerEvents: "none",
@@ -664,7 +722,10 @@ export default function Home() {
             </div>
 
             {/* Floating Top Telemetry Badge */}
-            <div
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.6 }}
               style={{
                 position: "absolute",
                 top: -14,
@@ -693,10 +754,13 @@ export default function Home() {
                 }}
               />
               <span>BlazePose 33 Keypoints · 30 FPS</span>
-            </div>
+            </motion.div>
 
             {/* Floating Bottom Telemetry Badge */}
-            <div
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.7 }}
               style={{
                 position: "absolute",
                 bottom: -14,
@@ -717,11 +781,11 @@ export default function Home() {
             >
               <Sparkles size={14} style={{ color: "var(--primary)" }} />
               <span>Surgeon Protocol Synced · Flexion 18° ⟷ 92°</span>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </section>
 
-        {/* ── 3D INTERACTIVE BIOMECHANICS SANDBOX ── */}
+        {/* ── 3D INTERACTIVE BIOMECHANICS SANDBOX (WALKTHROUGH REVEAL) ── */}
         <section
           id="sandbox"
           style={{
@@ -763,8 +827,14 @@ export default function Home() {
           />
 
           <div style={{ maxWidth: 1200, margin: "0 auto", position: "relative", zIndex: 10 }}>
-            {/* Section Header */}
-            <div style={{ textAlign: "center", marginBottom: 56 }}>
+            {/* Section Header with Scroll Reveal */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              style={{ textAlign: "center", marginBottom: 56 }}
+            >
               <div
                 className="badge badge-blue"
                 style={{
@@ -801,7 +871,7 @@ export default function Home() {
                 or click clinical milestones to see how AI calculates real-time angle compliance,
                 ligament stress, and voice coaching feedback.
               </p>
-            </div>
+            </motion.div>
 
             {/* Sandbox Two-Column Layout */}
             <div
@@ -813,7 +883,13 @@ export default function Home() {
               }}
             >
               {/* Left Column: 3D Joint Stage with live angle */}
-              <div style={{ position: "relative" }}>
+              <motion.div
+                initial={{ opacity: 0, x: -40, scale: 0.96 }}
+                whileInView={{ opacity: 1, x: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                style={{ position: "relative" }}
+              >
                 <JointVisualizer3D
                   angle={sandboxAngle}
                   targetAngle={sandboxTarget}
@@ -823,10 +899,14 @@ export default function Home() {
                   showBadges={true}
                   theme="light"
                 />
-              </div>
+              </motion.div>
 
               {/* Right Column: Interactive Biomechanical Telemetry & Presets */}
-              <div
+              <motion.div
+                initial={{ opacity: 0, x: 40, scale: 0.96 }}
+                whileInView={{ opacity: 1, x: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 className="card"
                 style={{
                   background: "#ffffff",
@@ -1076,12 +1156,12 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </div>
         </section>
 
-        {/* ── HOW RECOVERX WORKS ── */}
+        {/* ── HOW RECOVERX WORKS (WALKTHROUGH STEP REVEAL) ── */}
         <section
           id="how-it-works"
           style={{
@@ -1089,7 +1169,13 @@ export default function Home() {
             background: "linear-gradient(180deg, var(--bg-page) 0%, #E6EFF8 100%)",
           }}
         >
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.7 }}
+            style={{ textAlign: "center", marginBottom: 60 }}
+          >
             <div
               className="badge badge-blue"
               style={{
@@ -1122,7 +1208,7 @@ export default function Home() {
             >
               From your surgeon’s initial discharge letter to full mobility — guided every single rep.
             </p>
-          </div>
+          </motion.div>
 
           <div
             style={{
@@ -1159,8 +1245,13 @@ export default function Home() {
                 desc: "Gemini provides instantaneous, hands-free voice corrections: 'Hold for 2 more seconds... perfect rep recorded!' You never need to stare at the screen.",
               },
             ].map((item, i) => (
-              <div
+              <motion.div
                 key={i}
+                initial={{ opacity: 0, y: 40, scale: 0.95 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.6, delay: i * 0.18, ease: [0.16, 1, 0.3, 1] }}
+                whileHover={{ y: -8, boxShadow: "0 20px 40px rgba(26,110,189,0.14)", transition: { duration: 0.2 } }}
                 className="card"
                 style={{
                   padding: "36px 30px",
@@ -1170,17 +1261,6 @@ export default function Home() {
                   border: "1.5px solid rgba(216,230,240,0.9)",
                   borderRadius: 24,
                   boxShadow: "0 10px 30px rgba(0,40,80,0.06)",
-                  transition: "transform 0.25s ease, box-shadow 0.25s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-6px)";
-                  e.currentTarget.style.boxShadow =
-                    "0 20px 40px rgba(26,110,189,0.12)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow =
-                    "0 10px 30px rgba(0,40,80,0.06)";
                 }}
               >
                 <div
@@ -1236,12 +1316,12 @@ export default function Home() {
                 >
                   {item.desc}
                 </p>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>
 
-        {/* ── CLINICAL TRUST METRICS ── */}
+        {/* ── CLINICAL TRUST METRICS (WALKTHROUGH REVEAL) ── */}
         <section style={{ padding: "80px 48px", background: "#fff" }}>
           <div
             style={{
@@ -1258,8 +1338,13 @@ export default function Home() {
               { value: "AAOS", label: "2022 Guidelines", sub: "evidence-based protocols" },
               { value: "0", label: "Invented Protocols", sub: "strictly surgeon-prescribed" },
             ].map((s, i) => (
-              <div
+              <motion.div
                 key={i}
+                initial={{ opacity: 0, scale: 0.88, y: 30 }}
+                whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.5, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
+                whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
                 className="card"
                 style={{
                   padding: "32px 24px",
@@ -1298,7 +1383,7 @@ export default function Home() {
                 <div style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 500 }}>
                   {s.sub}
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
 
@@ -1319,14 +1404,20 @@ export default function Home() {
           </p>
         </section>
 
-        {/* ── CORE CAPABILITIES FEATURE GRID ── */}
+        {/* ── CORE CAPABILITIES FEATURE GRID (WALKTHROUGH REVEAL) ── */}
         <section
           style={{
             padding: "96px 48px",
             background: "var(--bg-page)",
           }}
         >
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.7 }}
+            style={{ textAlign: "center", marginBottom: 60 }}
+          >
             <div
               className="badge badge-green"
               style={{
@@ -1359,7 +1450,7 @@ export default function Home() {
             >
               Every tool a patient needs to safely rebuild strength and range of motion at home.
             </p>
-          </div>
+          </motion.div>
 
           <div
             style={{
@@ -1371,8 +1462,13 @@ export default function Home() {
             }}
           >
             {FEATURES.map((f, i) => (
-              <div
+              <motion.div
                 key={i}
+                initial={{ opacity: 0, y: 30, scale: 0.98 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.55, delay: (i % 2) * 0.15 + Math.floor(i / 2) * 0.08, ease: [0.16, 1, 0.3, 1] }}
+                whileHover={{ y: -6, boxShadow: "0 16px 36px rgba(26,110,189,0.12)", transition: { duration: 0.2 } }}
                 className="card"
                 style={{
                   padding: "32px 28px",
@@ -1380,20 +1476,9 @@ export default function Home() {
                   border: `1.5px solid ${f.border}`,
                   borderRadius: 22,
                   boxShadow: "0 4px 18px rgba(0,40,80,0.04)",
-                  transition: "all 0.25s ease",
                   display: "flex",
                   gap: 20,
                   alignItems: "flex-start",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow =
-                    "0 16px 36px rgba(26,110,189,0.12)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow =
-                    "0 4px 18px rgba(0,40,80,0.04)";
                 }}
               >
                 <div
@@ -1434,12 +1519,12 @@ export default function Home() {
                     {f.desc}
                   </p>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>
 
-        {/* ── 16-WEEK CLINICAL ROADMAP ── */}
+        {/* ── 16-WEEK CLINICAL ROADMAP (WALKTHROUGH REVEAL) ── */}
         <section
           id="roadmap"
           style={{
@@ -1448,7 +1533,13 @@ export default function Home() {
             borderTop: "1px solid var(--border)",
           }}
         >
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.7 }}
+            style={{ textAlign: "center", marginBottom: 56 }}
+          >
             <div
               className="badge badge-blue"
               style={{
@@ -1481,11 +1572,15 @@ export default function Home() {
             >
               See how clinical targets, range-of-motion expectations, and exercises evolve across 16 weeks.
             </p>
-          </div>
+          </motion.div>
 
           <div style={{ maxWidth: 1060, margin: "0 auto" }}>
-            {/* Timeline Progress Track */}
-            <div
+            {/* Timeline Progress Track with Motion */}
+            <motion.div
+              initial={{ opacity: 0, y: 25 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ duration: 0.6, delay: 0.15 }}
               style={{
                 position: "relative",
                 display: "flex",
@@ -1575,10 +1670,14 @@ export default function Home() {
                   </button>
                 );
               })}
-            </div>
+            </motion.div>
 
-            {/* Timeline Detail Card */}
-            <div
+            {/* Timeline Detail Card with Motion */}
+            <motion.div
+              key={selectedWeek}
+              initial={{ opacity: 0, scale: 0.97, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
               className="card"
               style={{
                 padding: "44px 40px",
@@ -1720,11 +1819,11 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </section>
 
-        {/* ── DOCTOR ↔ PATIENT INTEGRATED BRIDGE ── */}
+        {/* ── DOCTOR ↔ PATIENT INTEGRATED BRIDGE (WALKTHROUGH REVEAL) ── */}
         <section
           style={{
             padding: "96px 48px",
@@ -1732,7 +1831,13 @@ export default function Home() {
             borderTop: "1px solid var(--border)",
           }}
         >
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.7 }}
+            style={{ textAlign: "center", marginBottom: 60 }}
+          >
             <div
               className="badge badge-green"
               style={{
@@ -1765,7 +1870,7 @@ export default function Home() {
             >
               RecoverX connects home rehabilitation sessions directly to the orthopedic portal in real time.
             </p>
-          </div>
+          </motion.div>
 
           <div
             style={{
@@ -1777,7 +1882,11 @@ export default function Home() {
             }}
           >
             {/* Patient Portal Card */}
-            <div
+            <motion.div
+              initial={{ opacity: 0, x: -35 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
               className="card"
               style={{
                 padding: 36,
@@ -1911,10 +2020,14 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
             {/* Doctor Portal Card */}
-            <div
+            <motion.div
+              initial={{ opacity: 0, x: 35 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
               className="card"
               style={{
                 padding: 36,
@@ -2106,11 +2219,11 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </section>
 
-        {/* ── PATIENT EXPERIENCES & TESTIMONIALS ── */}
+        {/* ── PATIENT EXPERIENCES & TESTIMONIALS (WALKTHROUGH REVEAL) ── */}
         <section
           style={{
             padding: "96px 48px",
@@ -2118,7 +2231,13 @@ export default function Home() {
             borderTop: "1px solid var(--border)",
           }}
         >
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.7 }}
+            style={{ textAlign: "center", marginBottom: 60 }}
+          >
             <div
               className="badge badge-blue"
               style={{
@@ -2141,7 +2260,7 @@ export default function Home() {
             >
               Real Patients, Verified Recovery
             </h2>
-          </div>
+          </motion.div>
 
           <div
             style={{
@@ -2153,8 +2272,13 @@ export default function Home() {
             }}
           >
             {TESTIMONIALS.map((t, i) => (
-              <div
+              <motion.div
                 key={i}
+                initial={{ opacity: 0, y: 35, scale: 0.96 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.6, delay: i * 0.16, ease: [0.16, 1, 0.3, 1] }}
+                whileHover={{ y: -6, boxShadow: "0 16px 36px rgba(0,40,80,0.10)", transition: { duration: 0.2 } }}
                 className="card"
                 style={{
                   padding: "36px 30px",
@@ -2226,7 +2350,7 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>
@@ -2270,7 +2394,11 @@ export default function Home() {
             }}
           />
 
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.97 }}
+            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             style={{
               position: "relative",
               zIndex: 1,
@@ -2353,7 +2481,7 @@ export default function Home() {
                 Test 3D Sandbox
               </a>
             </div>
-          </div>
+          </motion.div>
         </section>
 
         {/* ── FOOTER ── */}
