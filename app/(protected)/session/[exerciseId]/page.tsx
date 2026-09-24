@@ -14,9 +14,10 @@ import { getUser } from "../../../lib/auth";
 import { saveLocalSession, getGeminiApiKey } from "../../../lib/supabase";
 import {
   EmaSmoother,
+  LandmarkSmoother,
   RepCounter,
   SideTracker,
-  kneeAngleForSide,
+  calculateExerciseAngle,
   redZoneState,
   roundAngle,
   shouldEmitDisplayAngle,
@@ -142,18 +143,21 @@ export default function LiveSessionPage() {
   const lastDetectTime = useRef(0);
   const currentAngleRef = useRef(0);
   const bestAngleRef = useRef(0);
+  const repCountRef = useRef(0);
   const angleLogRef = useRef<AngleLog[]>([]);
   const feedbackMessagesRef = useRef<FeedbackMessage[]>([]);
   const lastAngleLogTime = useRef(0);
   const lastFeedbackTime = useRef(0);
   const isSpeakingRef = useRef(false);
-  const angleSmootherRef = useRef(new EmaSmoother(0.2));
+  const landmarkSmootherRef = useRef(new LandmarkSmoother(0.35, 0.002));
+  const angleSmootherRef = useRef(new EmaSmoother(0.28, 0.75));
   const sideTrackerRef = useRef(new SideTracker());
-  const repCounterRef = useRef(new RepCounter());
+  const repCounterRef = useRef(new RepCounter(config.targetAngle, exerciseId));
   const lastDisplayEmitRef = useRef({ time: 0, value: 0 });
   const sessionStartRef = useRef(Date.now());
   const poseDetectedRef = useRef(true);
   const currentSideRef = useRef<"RIGHT" | "LEFT">("RIGHT");
+  const simTargetReported = useRef(false);
 
   const [cameraState, setCameraState] = useState<CameraState>("starting");
   const [poseState, setPoseState] = useState<PoseState>("loading");
@@ -165,6 +169,8 @@ export default function LiveSessionPage() {
   const [elapsed, setElapsed] = useState(0);
   const [sessionPain, setSessionPain] = useState(2);
   const [painAfter, setPainAfter] = useState(2);
+  const [clinicalSummary, setClinicalSummary] = useState<string>("");
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
   const [feedbackMessages, setFeedbackMessages] = useState<FeedbackMessage[]>([
     { text: "Camera ready. Move slowly and stay in frame.", type: "encouragement", t: 0 },
   ]);
@@ -179,6 +185,10 @@ export default function LiveSessionPage() {
   const [show3dTwin, setShow3dTwin] = useState(true);
   const [repHistory, setRepHistory] = useState<{ rep: number; angle: number; correct: boolean }[]>([]);
   const feedbackLogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    repCounterRef.current.configure(config.targetAngle, exerciseId);
+  }, [config.targetAngle, exerciseId]);
 
   const angleDeviation = Math.abs(config.targetAngle - currentAngle);
   const tone = getAngleTone(angleDeviation);
@@ -225,228 +235,358 @@ export default function LiveSessionPage() {
     }
   }, [addFeedbackMessage, sessionPain]);
 
-  const triggerFeedback = useCallback(async (angle: number) => {
-    const now = Date.now();
-    if (now - lastFeedbackTime.current < FEEDBACK_INTERVAL || isSpeakingRef.current) return;
-    lastFeedbackTime.current = now;
+  const speakInstantCoach = useCallback(
+    (
+      type: "intro" | "target_reached" | "rep_completed" | "guidance" | "safety",
+      angle?: number,
+      repNumber?: number,
+    ) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+      const synth = window.speechSynthesis;
 
-    const deviation = config.targetAngle - angle;
-    const inRange = Math.abs(deviation) < 8;
-    const fallbackText = inRange
-      ? "Nice control. Keep that rhythm."
-      : deviation > 0
-        ? "Gently bend a little more."
-        : "Ease back toward your target.";
+      // Check if already speaking - avoid cutting off words or stuttering
+      if ((synth.speaking || isSpeakingRef.current) && type !== "safety") {
+        return;
+      }
 
-    let text = fallbackText;
-    const apiKey = getGeminiApiKey();
+      // Only emergency safety alerts can interrupt
+      if (type === "safety") {
+        synth.cancel();
+      }
 
-    if (apiKey) {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const prompt = inRange
-        ? `Patient at Week ${config.recoveryWeek} is correctly doing "${config.name}" at ${angle}° (target ${config.targetAngle}°). Give ONE warm encouragement, max 8 words.`
-        : deviation > 0
-          ? `Post-surgery patient (Week ${config.recoveryWeek}, ${config.surgeryType}) doing "${config.name}". At ${angle}°, needs to reach ${config.targetAngle}°. They need to bend more. Give ONE warm specific correction, max 12 words, no degrees mentioned. Sound like a caring physiotherapist.`
-          : `Patient (Week ${config.recoveryWeek}) doing "${config.name}" has gone past target ${config.targetAngle}° to ${angle}°. Ask them to return to the target gently. Max 10 words.`;
+      let text = "";
+      let feedbackType: FeedbackType = "encouragement";
+
+      if (type === "intro") {
+        text = `Starting ${config.name}. Target angle is ${config.targetAngle} degrees. Begin when you're ready.`;
+        feedbackType = "encouragement";
+      } else if (type === "target_reached") {
+        const phrases = [
+          `Target reached! Hold steady.`,
+          `Right at ${config.targetAngle} degrees, hold it.`,
+          `Target achieved! Excellent control.`,
+          `Perfect angle. Hold for a moment.`,
+        ];
+        text = phrases[Math.floor(Math.random() * phrases.length)];
+        feedbackType = "encouragement";
+      } else if (type === "rep_completed") {
+        const rep = repNumber ?? (repCountRef.current + 1);
+        if (rep === Math.floor(config.targetReps / 2)) {
+          text = `Halfway there! ${rep} reps down, form looks fantastic.`;
+        } else if (rep >= config.targetReps) {
+          text = `Set complete! All ${config.targetReps} reps finished. Outstanding work!`;
+        } else {
+          const phrases = [
+            `Rep ${rep} complete, great form.`,
+            `Rep ${rep} done, smooth return.`,
+            `Nice repetition ${rep}, keep that rhythm.`,
+            `Rep ${rep} counted, looking strong.`,
+          ];
+          text = phrases[(rep - 1) % phrases.length];
+        }
+        feedbackType = "encouragement";
+      } else if (type === "guidance") {
+        if (angle === undefined) return;
+        const deviation = config.targetAngle - angle;
+        if (Math.abs(deviation) <= 8) {
+          text = "Nice control. Keep breathing.";
+          feedbackType = "encouragement";
+        } else if (deviation > 0) {
+          text = "Gently bend a little further.";
+          feedbackType = "correction";
+        } else {
+          text = "Ease back slightly toward the target.";
+          feedbackType = "correction";
+        }
+      } else if (type === "safety") {
+        text = "Warning: ease back slowly. Do not push into pain.";
+        feedbackType = "danger";
+      }
+
+      if (!text) return;
+
+      addFeedbackMessage(text, feedbackType);
 
       try {
-        const result = await model.generateContent(prompt);
-        text = result.response.text().trim().replace(/[*_"]/g, "");
-      } catch (error) {
-        console.warn("Gemini feedback skipped:", error);
-      }
-    }
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voices = synth.getVoices();
+        if (voices && voices.length > 0) {
+          const preferred = [
+            "Samantha", "Ava", "Victoria", "Daniel", "Karen", "Alex",
+            "Google US English", "Google UK English Female",
+            "Microsoft Jenny", "Microsoft Aria", "Natural"
+          ];
+          let chosen = null;
+          for (const name of preferred) {
+            chosen = voices.find((v) => v.name.includes(name));
+            if (chosen) break;
+          }
+          if (!chosen) {
+            chosen = voices.find(
+              (v) =>
+                v.lang.startsWith("en") &&
+                !v.name.toLowerCase().includes("whisper") &&
+                !v.name.toLowerCase().includes("bells")
+            );
+          }
+          if (chosen) utterance.voice = chosen;
+        }
 
-    addFeedbackMessage(text, inRange ? "encouragement" : "correction");
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
 
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.88;
-      utterance.pitch = 1.05;
-      utterance.volume = 1;
-      utterance.onstart = () => {
-        isSpeakingRef.current = true;
-        setIsSpeaking(true);
-      };
-      utterance.onend = () => {
+        utterance.onstart = () => {
+          isSpeakingRef.current = true;
+          setIsSpeaking(true);
+        };
+        utterance.onend = () => {
+          isSpeakingRef.current = false;
+          setIsSpeaking(false);
+        };
+        utterance.onerror = () => {
+          isSpeakingRef.current = false;
+          setIsSpeaking(false);
+        };
+
+        synth.speak(utterance);
+      } catch (err) {
+        console.warn("Speech synthesis error:", err);
         isSpeakingRef.current = false;
         setIsSpeaking(false);
-      };
-      window.speechSynthesis.speak(utterance);
-    }
-  }, [addFeedbackMessage, config.name, config.recoveryWeek, config.surgeryType, config.targetAngle]);
-
-  const drawFrame = useCallback((results: PoseResult) => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-
-    const videoWidth = video.videoWidth || 1280;
-    const videoHeight = video.videoHeight || 720;
-    if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
-      canvas.width = videoWidth;
-      canvas.height = videoHeight;
-    }
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const w = canvas.width;
-    const h = canvas.height;
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.save();
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, -w, 0, w, h);
-    ctx.restore();
-
-    const vignette = ctx.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, h * 0.7);
-    vignette.addColorStop(0, "transparent");
-    vignette.addColorStop(1, "rgba(2,8,18,0.4)");
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, w, h);
-
-    if (!results.landmarks || results.landmarks.length === 0) {
-      if (poseDetectedRef.current) {
-        poseDetectedRef.current = false;
-        setPoseDetected(false);
       }
-      return;
-    }
+    },
+    [config.name, config.targetAngle, config.targetReps, addFeedbackMessage],
+  );
 
-    if (!poseDetectedRef.current) {
-      poseDetectedRef.current = true;
-      setPoseDetected(true);
-    }
+  const triggerFeedback = useCallback(
+    (angle: number) => {
+      const now = Date.now();
+      if (now - lastFeedbackTime.current < FEEDBACK_INTERVAL) return;
+      lastFeedbackTime.current = now;
 
-    const lm = results.landmarks[0];
+      speakInstantCoach("guidance", angle);
+    },
+    [speakInstantCoach],
+  );
 
-    ctx.strokeStyle = "rgba(255,255,255,0.35)";
-    ctx.lineWidth = 1.5;
-    poseConnections.forEach(([i, j]) => {
-      const a = lm[i];
-      const b = lm[j];
-      if (!a || !b) return;
-      ctx.beginPath();
-      ctx.moveTo((1 - a.x) * w, a.y * h);
-      ctx.lineTo((1 - b.x) * w, b.y * h);
-      ctx.stroke();
-    });
+  const drawFrame = useCallback(
+    (smoothedLm: PoseLandmark[] | null) => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas) return;
 
-    lm.forEach((point: PoseLandmark, i: number) => {
-      const isKeyJoint = [23, 24, 25, 26, 27, 28].includes(i);
-      ctx.beginPath();
-      ctx.arc((1 - point.x) * w, point.y * h, isKeyJoint ? 7 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = isKeyJoint ? "#0EA5E9" : "rgba(255,255,255,0.5)";
-      ctx.fill();
-      if (isKeyJoint) {
-        ctx.strokeStyle = "rgba(14,165,233,0.4)";
-        ctx.lineWidth = 2;
+      const videoWidth = video.videoWidth || 1280;
+      const videoHeight = video.videoHeight || 720;
+      if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
+        canvas.width = videoWidth;
+        canvas.height = videoHeight;
+      }
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -w, 0, w, h);
+      ctx.restore();
+
+      const vignette = ctx.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, h * 0.7);
+      vignette.addColorStop(0, "transparent");
+      vignette.addColorStop(1, "rgba(2,8,18,0.4)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, w, h);
+
+      if (!smoothedLm || smoothedLm.length === 0) {
+        if (poseDetectedRef.current) {
+          poseDetectedRef.current = false;
+          setPoseDetected(false);
+        }
+        return;
+      }
+
+      if (!poseDetectedRef.current) {
+        poseDetectedRef.current = true;
+        setPoseDetected(true);
+      }
+
+      const lm = smoothedLm;
+
+      ctx.strokeStyle = "rgba(255,255,255,0.4)";
+      ctx.lineWidth = 2;
+      poseConnections.forEach(([i, j]) => {
+        const a = lm[i];
+        const b = lm[j];
+        if (!a || !b) return;
+        ctx.beginPath();
+        ctx.moveTo((1 - a.x) * w, a.y * h);
+        ctx.lineTo((1 - b.x) * w, b.y * h);
+        ctx.stroke();
+      });
+
+      lm.forEach((point: PoseLandmark, i: number) => {
+        const isKeyJoint = [11, 12, 23, 24, 25, 26, 27, 28].includes(i);
+        ctx.beginPath();
+        ctx.arc((1 - point.x) * w, point.y * h, isKeyJoint ? 6 : 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = isKeyJoint ? "#0EA5E9" : "rgba(255,255,255,0.6)";
+        ctx.fill();
+        if (isKeyJoint) {
+          ctx.strokeStyle = "rgba(14,165,233,0.5)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      });
+
+      const isStraightLeg = exerciseId.includes("straight-leg-raise");
+      const hip = lm[currentSideRef.current === "RIGHT" ? 24 : 23];
+      const knee = lm[currentSideRef.current === "RIGHT" ? 26 : 25];
+      const ankle = lm[currentSideRef.current === "RIGHT" ? 28 : 27];
+      const shoulder = lm[currentSideRef.current === "RIGHT" ? 12 : 11];
+
+      if (isStraightLeg && hip && shoulder && knee) {
+        const hx = (1 - hip.x) * w;
+        const hy = hip.y * h;
+        const angle1 = Math.atan2((shoulder.y - hip.y) * h, ((1 - shoulder.x) - (1 - hip.x)) * w);
+        const angle2 = Math.atan2((knee.y - hip.y) * h, ((1 - knee.x) - (1 - hip.x)) * w);
+        const arcTone = getAngleTone(Math.abs(config.targetAngle - currentAngleRef.current));
+
+        ctx.beginPath();
+        ctx.arc(hx, hy, 55, angle1, angle2);
+        ctx.strokeStyle = arcTone.glow;
+        ctx.lineWidth = 12;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(hx, hy, 50, angle1, angle2);
+        ctx.strokeStyle = arcTone.color;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      } else if (hip && knee && ankle) {
+        const kx = (1 - knee.x) * w;
+        const ky = knee.y * h;
+        const angle1 = Math.atan2((hip.y - knee.y) * h, ((1 - hip.x) - (1 - knee.x)) * w);
+        const angle2 = Math.atan2((ankle.y - knee.y) * h, ((1 - ankle.x) - (1 - knee.x)) * w);
+        const arcTone = getAngleTone(Math.abs(config.targetAngle - currentAngleRef.current));
+
+        ctx.beginPath();
+        ctx.arc(kx, ky, 55, angle1, angle2);
+        ctx.strokeStyle = arcTone.glow;
+        ctx.lineWidth = 12;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(kx, ky, 50, angle1, angle2);
+        ctx.strokeStyle = arcTone.color;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
         ctx.stroke();
       }
-    });
+    },
+    [config.targetAngle, exerciseId],
+  );
 
-    const hip = lm[currentSideRef.current === "RIGHT" ? 24 : 23];
-    const knee = lm[currentSideRef.current === "RIGHT" ? 26 : 25];
-    const ankle = lm[currentSideRef.current === "RIGHT" ? 28 : 27];
-    if (!hip || !knee || !ankle) return;
+  const processAngles = useCallback(
+    (smoothedLm: PoseLandmark[]) => {
+      if (!smoothedLm?.length) return;
+      if (!smoothedLm[23] || !smoothedLm[24] || !smoothedLm[25] || !smoothedLm[26] || !smoothedLm[27] || !smoothedLm[28]) return;
 
-    const kx = (1 - knee.x) * w;
-    const ky = knee.y * h;
-    const angle1 = Math.atan2((hip.y - knee.y) * h, ((1 - hip.x) - (1 - knee.x)) * w);
-    const angle2 = Math.atan2((ankle.y - knee.y) * h, ((1 - ankle.x) - (1 - knee.x)) * w);
-    const arcTone = getAngleTone(Math.abs(config.targetAngle - currentAngleRef.current));
+      const side = sideTrackerRef.current.update(smoothedLm);
+      if (!side) return;
 
-    ctx.beginPath();
-    ctx.arc(kx, ky, 55, angle1, angle2);
-    ctx.strokeStyle = arcTone.glow;
-    ctx.lineWidth = 12;
-    ctx.stroke();
+      const measurement = calculateExerciseAngle(smoothedLm, side, exerciseId);
+      if (!measurement) return;
 
-    ctx.beginPath();
-    ctx.arc(kx, ky, 50, angle1, angle2);
-    ctx.strokeStyle = arcTone.color;
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.stroke();
-  }, [config.targetAngle]);
+      currentSideRef.current = side;
+      const smoothed = angleSmootherRef.current.update(measurement.angle);
+      const angle = roundAngle(smoothed);
 
-  const processAngles = useCallback((results: PoseResult) => {
-    if (!results.landmarks?.length) return;
-    const lm = results.landmarks[0];
-    if (!lm[23] || !lm[24] || !lm[25] || !lm[26] || !lm[27] || !lm[28]) return;
-
-    const side = sideTrackerRef.current.update(lm);
-    if (!side) return;
-
-    const rawAngle = kneeAngleForSide(lm, side);
-    if (rawAngle === null) return;
-
-    currentSideRef.current = side;
-    const smoothed = angleSmootherRef.current.update(rawAngle);
-    const angle = roundAngle(smoothed);
-
-    currentAngleRef.current = angle;
-    if (shouldEmitDisplayAngle(lastDisplayEmitRef.current, angle)) {
-      lastDisplayEmitRef.current = { time: Date.now(), value: angle };
-      setCurrentAngle(angle);
-    }
-
-    if (angle > bestAngleRef.current) {
-      bestAngleRef.current = angle;
-      setBestAngle(angle);
-    }
-
-    const now = Date.now();
-    if (now - lastAngleLogTime.current > 500) {
-      lastAngleLogTime.current = now;
-      angleLogRef.current.push({ t: now - sessionStartRef.current, a: angle });
-    }
-
-    if (repCounterRef.current.update(smoothed) === "rep_completed") {
-      setRepCount((value) => value + 1);
-      const deviation = Math.abs(config.targetAngle - bestAngleRef.current);
-      if (deviation < 15) setCorrectReps((value) => value + 1);
-      bestAngleRef.current = 0;
-    }
-
-    triggerFeedback(angle);
-
-    // Feature 5: Red Zone Alert (hysteresis on smoothed angle)
-    const dev = Math.abs(config.targetAngle - angle);
-    const nextRedZone = redZoneState(redZoneRef.current, dev);
-    if (nextRedZone !== redZoneRef.current) {
-      redZoneRef.current = nextRedZone;
-      setRedZoneActive(nextRedZone);
-      if (nextRedZone) {
-        addFeedbackMessage("⚠️ You're far outside the target range — ease back slowly.", "danger");
+      currentAngleRef.current = angle;
+      if (shouldEmitDisplayAngle(lastDisplayEmitRef.current, angle)) {
+        lastDisplayEmitRef.current = { time: Date.now(), value: angle };
+        setCurrentAngle(angle);
       }
-    }
 
-    // Feature 3: Compensation Detector (check every 4s)
-    const now2 = Date.now();
-    if (now2 - lastCompCheck.current > 4000 && lm[11] && lm[12] && lm[23] && lm[24]) {
-      lastCompCheck.current = now2;
-      const issues: string[] = [];
-      const shoulderTilt = Math.abs(lm[11].y - lm[12].y);
-      const hipTilt = Math.abs(lm[23].y - lm[24].y);
-      if (shoulderTilt > 0.06) issues.push("Shoulder tilt detected — keep shoulders level");
-      if (hipTilt > 0.05) issues.push("Hip shift detected — keep hips square");
-      if (dev > 20 && angle < config.targetAngle * 0.5) issues.push("Insufficient range — try to bend further");
-      setCompensations(issues);
-    }
-  }, [config.targetAngle, triggerFeedback, addFeedbackMessage]);
+      if (angle > bestAngleRef.current) {
+        bestAngleRef.current = angle;
+        setBestAngle(angle);
+      }
 
-  const detectLoop = useCallback((timestamp: number) => {
-    if (timestamp - lastDetectTime.current > 33 && landmarkerRef.current && videoRef.current && videoRef.current.readyState >= 2) {
-      lastDetectTime.current = timestamp;
-      const results = landmarkerRef.current.detectForVideo(videoRef.current, timestamp) as PoseResult;
-      drawFrame(results);
-      processAngles(results);
-    }
-    animFrameRef.current = requestAnimationFrame(detectLoop);
-  }, [drawFrame, processAngles]);
+      const now = Date.now();
+      if (now - lastAngleLogTime.current > 500) {
+        lastAngleLogTime.current = now;
+        angleLogRef.current.push({ t: now - sessionStartRef.current, a: angle });
+      }
+
+      const repEvent = repCounterRef.current.update(smoothed);
+      if (repEvent === "target_reached") {
+        speakInstantCoach("target_reached", angle);
+      } else if (repEvent === "rep_completed") {
+        const nextRep = repCountRef.current + 1;
+        repCountRef.current = nextRep;
+        setRepCount(nextRep);
+        const deviation = Math.abs(config.targetAngle - (bestAngleRef.current || angle));
+        const isGood = deviation <= 14;
+        if (isGood) setCorrectReps((val) => val + 1);
+        setRepHistory((prev) => [...prev, { rep: nextRep, angle: bestAngleRef.current || angle, correct: isGood }]);
+        speakInstantCoach("rep_completed", angle, nextRep);
+        bestAngleRef.current = 0;
+      }
+
+      triggerFeedback(angle);
+
+      // Feature 5: Red Zone Alert (hysteresis on smoothed angle)
+      const dev = Math.abs(config.targetAngle - angle);
+      const nextRedZone = redZoneState(redZoneRef.current, dev);
+      if (nextRedZone !== redZoneRef.current) {
+        redZoneRef.current = nextRedZone;
+        setRedZoneActive(nextRedZone);
+        if (nextRedZone) {
+          speakInstantCoach("safety");
+        }
+      }
+
+      // Feature 3: Compensation Detector (check every 4s)
+      const now2 = Date.now();
+      if (now2 - lastCompCheck.current > 4000 && smoothedLm[11] && smoothedLm[12] && smoothedLm[23] && smoothedLm[24]) {
+        lastCompCheck.current = now2;
+        const issues: string[] = [];
+        const shoulderTilt = Math.abs(smoothedLm[11].y - smoothedLm[12].y);
+        const hipTilt = Math.abs(smoothedLm[23].y - smoothedLm[24].y);
+        if (shoulderTilt > 0.06) issues.push("Shoulder tilt detected — keep shoulders level");
+        if (hipTilt > 0.05) issues.push("Hip shift detected — keep hips square");
+        if (dev > 20 && angle < config.targetAngle * 0.5) issues.push("Insufficient range — try to bend further");
+        setCompensations(issues);
+      }
+    },
+    [exerciseId, config.targetAngle, triggerFeedback, speakInstantCoach],
+  );
+
+  const detectLoop = useCallback(
+    (timestamp: number) => {
+      if (
+        timestamp - lastDetectTime.current > 33 &&
+        landmarkerRef.current &&
+        videoRef.current &&
+        videoRef.current.readyState >= 2
+      ) {
+        lastDetectTime.current = timestamp;
+        const results = landmarkerRef.current.detectForVideo(videoRef.current, timestamp) as PoseResult;
+        if (results.landmarks && results.landmarks.length > 0) {
+          const smoothedLm = landmarkSmootherRef.current.update(results.landmarks[0]);
+          drawFrame(smoothedLm);
+          processAngles(smoothedLm);
+        } else {
+          drawFrame(null);
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(detectLoop);
+    },
+    [drawFrame, processAngles],
+  );
 
   const initMediaPipe = useCallback(async () => {
     setPoseState("loading");
@@ -563,15 +703,24 @@ export default function LiveSessionPage() {
 
       angleLogRef.current.push({ t: Date.now() - sessionStartRef.current, a: simAngle });
 
+      // Check target reached
+      if (Math.abs(simAngle - config.targetAngle) <= 6 && !simTargetReported.current) {
+        simTargetReported.current = true;
+        speakInstantCoach("target_reached", simAngle);
+      } else if (Math.abs(simAngle - config.targetAngle) > 20) {
+        simTargetReported.current = false;
+      }
+
       // Count peak repetition
       if (Math.sin(simTime) > 0.96 && Math.sin(simTime - 0.08) <= 0.96) {
         localReps += 1;
+        repCountRef.current = localReps;
         const isGood = Math.abs(simAngle - config.targetAngle) <= 12;
         if (isGood) localCorrect += 1;
         setRepCount(localReps);
         setCorrectReps(localCorrect);
         setRepHistory((prev) => [...prev, { rep: localReps, angle: simAngle, correct: isGood }]);
-        triggerFeedback(simAngle);
+        speakInstantCoach("rep_completed", simAngle, localReps);
       }
 
       // Draw virtual stick figure skeleton on canvas
@@ -659,11 +808,34 @@ export default function LiveSessionPage() {
     }, 70);
 
     return () => clearInterval(interval);
-  }, [isSimulating, config.targetAngle, repCount, correctReps, triggerFeedback]);
+  }, [isSimulating, config.targetAngle, repCount, correctReps, speakInstantCoach]);
 
-  const endSession = () => {
+  const endSession = async () => {
     setPainAfter(sessionPain);
     setShowEndModal(true);
+
+    const apiKey = getGeminiApiKey();
+    if (apiKey) {
+      setIsGeneratingSummary(true);
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const prompt = `You are a licensed physical therapist writing an encouraging clinical progress note for a patient who just completed an exercise session.
+Exercise: ${config.name} (${config.surgeryType}, Week ${config.recoveryWeek})
+Target Angle: ${config.targetAngle}°
+Best Achieved Angle: ${bestAngleRef.current || currentAngleRef.current}°
+Reps: ${repCountRef.current || repCount} (${correctReps} with clean form)
+Pain: ${sessionPain}/10 during session.
+Compensations: ${compensations.length ? compensations.join(", ") : "None detected, clean form"}.
+Write 2 concise, warm, professional sentences assessing their mobility, safety, and encouragement for their recovery journey.`;
+        const result = await model.generateContent(prompt);
+        setClinicalSummary(result.response.text().trim().replace(/[*_"]/g, ""));
+      } catch (err) {
+        console.warn("AI summary error:", err);
+      } finally {
+        setIsGeneratingSummary(false);
+      }
+    }
   };
 
   const saveSession = async () => {
@@ -1039,7 +1211,18 @@ export default function LiveSessionPage() {
               ))}
             </ul>
             <p className="mt-5 text-sm leading-6 text-[var(--text-3)]">If you are experiencing any of these, stop your session and contact your physiotherapist immediately.</p>
-            <button onClick={() => { setShowRedFlagWarning(false); setSessionCleared(true); }} className="btn-primary mt-6 w-full px-6 py-3 text-sm">I understand, start session</button>
+            <button
+              onClick={() => {
+                setShowRedFlagWarning(false);
+                setSessionCleared(true);
+                setTimeout(() => {
+                  speakInstantCoach("intro");
+                }, 600);
+              }}
+              className="btn-primary mt-6 w-full px-6 py-3 text-sm"
+            >
+              I understand, start session
+            </button>
           </div>
         </div>
       )}
@@ -1102,6 +1285,24 @@ export default function LiveSessionPage() {
                 <div className="text-xs text-slate-400">Steady tempo maintained throughout workout.</div>
               )}
             </div>
+
+            {/* Dr. AI Clinical Assessment */}
+            {(isGeneratingSummary || clinicalSummary) && (
+              <div className="mb-4 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 text-left">
+                <div className="flex items-center gap-2 mb-2 text-xs font-bold text-sky-700 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Dr. AI Clinical Review</span>
+                </div>
+                {isGeneratingSummary ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 py-1">
+                    <span className="w-3 h-3 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
+                    <span>Analyzing biomechanics data...</span>
+                  </div>
+                ) : (
+                  <p className="text-xs leading-5 text-[var(--text-1)] font-medium">{clinicalSummary}</p>
+                )}
+              </div>
+            )}
 
             {/* Feature 4: Pain Predictor */}
             <div style={{
